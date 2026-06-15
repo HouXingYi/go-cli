@@ -28,12 +28,14 @@ func Execute() int {
 }
 
 func NewRootCommand(out, errOut io.Writer) *cobra.Command {
+	// 初始化 CLI 运行时，集中保存输出流、错误流和配置读取器。
 	rt := &runtime{
 		out:    out,
 		errOut: errOut,
 		viper:  viper.New(),
 	}
 
+	// 定义根命令；未指定子命令时展示帮助信息。
 	root := &cobra.Command{
 		Use:           config.AppName,
 		Short:         "A HTTP CLI.",
@@ -45,6 +47,7 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 		},
 	}
 
+	// 注册所有子命令共享的全局参数。
 	flags := root.PersistentFlags()
 	flags.StringVar(&rt.configFile, "config", "", fmt.Sprintf("config file path (default $HOME/%s.yaml)", config.DefaultConfigName))
 	flags.String("token", "", "access token")
@@ -53,12 +56,14 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 	flags.String("output", config.DefaultOutput, "output format: text or json")
 	flags.Bool("verbose", false, "enable verbose logs")
 
+	// 将命令行参数绑定到 viper，后续统一从配置层读取最终值。
 	mustBindFlag(rt.viper, "token", flags.Lookup("token"))
 	mustBindFlag(rt.viper, "base_url", flags.Lookup("base-url"))
 	mustBindFlag(rt.viper, "timeout", flags.Lookup("timeout"))
 	mustBindFlag(rt.viper, "output", flags.Lookup("output"))
 	mustBindFlag(rt.viper, "verbose", flags.Lookup("verbose"))
 
+	// 挂载业务子命令。
 	root.AddCommand(newAuthCommand(rt))
 	root.AddCommand(newRequestCommand(rt))
 

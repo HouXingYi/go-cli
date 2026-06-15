@@ -4,3 +4,5 @@ dist/
 *.exe
 *.test
 coverage.out
+
+/.cursor
