@@ -36,8 +36,8 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 
 	root := &cobra.Command{
 		Use:           config.AppName,
-		Short:         "A token-based HTTP CLI.",
-		Long:          "ziniao is a token-based HTTP CLI with configurable output and request settings.",
+		Short:         "A HTTP CLI.",
+		Long:          "ziniao is a HTTP CLI with configurable output and request settings.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -4,6 +4,10 @@
 
 ## 从源码构建
 
+构建前需要先安装 Go，并确保终端中可以执行 `go version`。
+
+构建当前平台：
+
 ```bash
 go build -o bin/ziniao ./cmd/ziniao
 ```
@@ -12,6 +16,42 @@ Windows：
 
 ```bash
 go build -o bin/ziniao.exe ./cmd/ziniao
+```
+
+一次构建多个平台：
+
+Windows：
+
+```bat
+scripts\build-all.bat
+```
+
+也可以使用 PowerShell：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-all.ps1
+```
+
+Linux / macOS / Git Bash：
+
+```bash
+bash scripts/build-all.sh
+```
+
+构建产物会输出到 `dist/`：
+
+```text
+dist/ziniao-linux-amd64
+dist/ziniao-linux-arm64
+dist/ziniao-darwin-amd64
+dist/ziniao-darwin-arm64
+dist/ziniao-windows-amd64.exe
+```
+
+Linux 环境中使用前需要赋予执行权限：
+
+```bash
+chmod +x dist/ziniao-linux-amd64
 ```
 
 ## 使用方式
@@ -116,8 +156,22 @@ go test ./...
 
 构建：
 
+Windows：
+
+```bat
+scripts\build-all.bat
+```
+
+也可以使用 PowerShell：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-all.ps1
+```
+
+Linux / macOS / Git Bash：
+
 ```bash
-go build -o bin/ziniao ./cmd/ziniao
+bash scripts/build-all.sh
 ```
 
 ## 常见问题
