@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	AppName           = "ziniao"
+	AppName           = "zn-cli"
+	Version           = "0.1.0"
 	EnvPrefix         = "ZINIAO"
 	DefaultConfigName = ".ziniao"
 	DefaultOutput     = OutputText

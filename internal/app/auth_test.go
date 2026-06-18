@@ -3,48 +3,44 @@ package app
 import (
 	"context"
 	"testing"
+
+	"ziniao/internal/httpclient"
 )
 
 type fakeClient struct {
-	verifyCalled bool
-	runCalled    bool
+	requestCalled bool
 }
 
-func (f *fakeClient) VerifyAuth(ctx context.Context) (AuthVerification, error) {
-	f.verifyCalled = true
-	return AuthVerification{Message: "verified"}, nil
+func (f *fakeClient) Request(ctx context.Context, options httpclient.RequestOptions) (httpclient.Response, error) {
+	f.requestCalled = true
+	return httpclient.Response{StatusCode: 200, Status: "200 OK"}, nil
 }
 
-func (f *fakeClient) RunRequest(ctx context.Context) (RequestResult, error) {
-	f.runCalled = true
-	return RequestResult{Message: "done"}, nil
-}
-
-func TestVerifyAuthRequiresToken(t *testing.T) {
+func TestHTTPRequestRequiresToken(t *testing.T) {
 	client := &fakeClient{}
 	service := NewService(client, "")
 
-	_, err := service.VerifyAuth(context.Background())
+	_, err := service.HTTPRequest(context.Background(), HTTPRequest{Method: "GET", Path: "/api/user/list"})
 	if err == nil {
-		t.Fatal("VerifyAuth() error = nil, want error")
+		t.Fatal("HTTPRequest() error = nil, want error")
 	}
-	if client.verifyCalled {
-		t.Fatal("VerifyAuth() called API without token")
+	if client.requestCalled {
+		t.Fatal("HTTPRequest() called API without token")
 	}
 }
 
-func TestRunRequestCallsAPI(t *testing.T) {
+func TestHTTPRequestCallsAPI(t *testing.T) {
 	client := &fakeClient{}
 	service := NewService(client, "test-token")
 
-	result, err := service.RunRequest(context.Background())
+	result, err := service.HTTPRequest(context.Background(), HTTPRequest{Method: "GET", Path: "/api/user/list"})
 	if err != nil {
-		t.Fatalf("RunRequest() error = %v", err)
+		t.Fatalf("HTTPRequest() error = %v", err)
 	}
-	if !client.runCalled {
-		t.Fatal("RunRequest() did not call API")
+	if !client.requestCalled {
+		t.Fatal("HTTPRequest() did not call API")
 	}
-	if result.Message != "done" {
-		t.Fatalf("Message = %q", result.Message)
+	if result.StatusCode != 200 {
+		t.Fatalf("StatusCode = %d", result.StatusCode)
 	}
 }

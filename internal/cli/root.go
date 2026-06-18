@@ -38,8 +38,8 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 	// 定义根命令；未指定子命令时展示帮助信息。
 	root := &cobra.Command{
 		Use:           config.AppName,
-		Short:         "A HTTP CLI.",
-		Long:          "ziniao is a HTTP CLI with configurable output and request settings.",
+		Short:         "Ziniao HTTP API CLI.",
+		Long:          "zn-cli sends authenticated HTTP requests and inspects the API catalog.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -65,7 +65,9 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 
 	// 挂载业务子命令。
 	root.AddCommand(newAuthCommand(rt))
-	root.AddCommand(newRequestCommand(rt))
+	root.AddCommand(newHTTPCommand(rt))
+	root.AddCommand(newAPICommand(rt))
+	root.AddCommand(newVersionCommand(rt))
 
 	return root
 }

@@ -6,19 +6,12 @@ import (
 	"ziniao/internal/httpclient"
 )
 
-type AuthVerification = httpclient.AuthVerifyResponse
-type RequestResult = httpclient.RunResponse
+type HTTPRequest = httpclient.RequestOptions
+type HTTPResponse = httpclient.Response
 
-func (s Service) VerifyAuth(ctx context.Context) (AuthVerification, error) {
+func (s Service) HTTPRequest(ctx context.Context, request HTTPRequest) (HTTPResponse, error) {
 	if err := s.requireToken(); err != nil {
-		return AuthVerification{}, err
+		return HTTPResponse{}, err
 	}
-	return s.api.VerifyAuth(ctx)
-}
-
-func (s Service) RunRequest(ctx context.Context) (RequestResult, error) {
-	if err := s.requireToken(); err != nil {
-		return RequestResult{}, err
-	}
-	return s.api.RunRequest(ctx)
+	return s.api.Request(ctx, request)
 }

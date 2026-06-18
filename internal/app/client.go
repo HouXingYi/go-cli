@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"ziniao/internal/apperr"
+	"ziniao/internal/httpclient"
 )
 
 type APIClient interface {
-	VerifyAuth(ctx context.Context) (AuthVerification, error)
-	RunRequest(ctx context.Context) (RequestResult, error)
+	Request(ctx context.Context, options httpclient.RequestOptions) (httpclient.Response, error)
 }
 
 type Service struct {
