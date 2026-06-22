@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"ziniao/internal/config"
 )
 
 func TestAuthReportsMissingToken(t *testing.T) {
@@ -23,7 +25,7 @@ func TestAuthReportsMissingToken(t *testing.T) {
 	if !strings.Contains(got, "token is required") {
 		t.Fatalf("stderr missing token error: %s", got)
 	}
-	if !strings.Contains(got, "pass --token or set ZINIAO_TOKEN") {
+	if !strings.Contains(got, "set ZINIAO_TOKEN") {
 		t.Fatalf("stderr missing token hint: %s", got)
 	}
 }
@@ -94,8 +96,13 @@ func TestHTTPCommandSendsRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv("ZINIAO_BASE_URL", server.URL)
 	t.Setenv("ZINIAO_TOKEN", "test-token")
+
+	originalBaseURL := config.DefaultBaseURL
+	config.DefaultBaseURL = server.URL
+	t.Cleanup(func() {
+		config.DefaultBaseURL = originalBaseURL
+	})
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer

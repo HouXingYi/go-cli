@@ -43,7 +43,7 @@ func TestErrorTextWithHint(t *testing.T) {
 	var errOut bytes.Buffer
 	renderer := New(config.OutputText, &bytes.Buffer{}, &errOut)
 
-	err := apperr.New(apperr.KindConfig, "token is required", "pass --token or set ZINIAO_TOKEN.")
+	err := apperr.New(apperr.KindConfig, "token is required", "set ZINIAO_TOKEN.")
 	if writeErr := renderer.Error(err); writeErr != nil {
 		t.Fatalf("Error() error = %v", writeErr)
 	}
@@ -52,7 +52,7 @@ func TestErrorTextWithHint(t *testing.T) {
 	if !strings.Contains(got, "Error: token is required") {
 		t.Fatalf("error output missing message: %s", got)
 	}
-	if !strings.Contains(got, "Hint: pass --token or set ZINIAO_TOKEN.") {
+	if !strings.Contains(got, "Hint: set ZINIAO_TOKEN.") {
 		t.Fatalf("error output missing hint: %s", got)
 	}
 }

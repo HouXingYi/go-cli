@@ -16,22 +16,19 @@ import (
 	"ziniao/internal/output"
 )
 
-func (rt *runtime) renderer(format string) output.Renderer {
-	return output.New(format, rt.out, rt.errOut)
+func (rt *runtime) renderer() output.Renderer {
+	return output.New(config.DefaultOutput, rt.out, rt.errOut)
 }
 
 func (rt *runtime) buildService(cfg config.Config) (app.Service, error) {
 	if err := cfg.RequireToken(); err != nil {
 		return app.Service{}, err
 	}
-	if err := cfg.RequireBaseURL(); err != nil {
-		return app.Service{}, err
-	}
 
 	api, err := httpclient.New(httpclient.Options{
-		BaseURL: cfg.BaseURL,
+		BaseURL: config.DefaultBaseURL,
 		Token:   cfg.Token,
-		Timeout: cfg.Timeout,
+		Timeout: config.DefaultTimeout,
 	})
 	if err != nil {
 		return app.Service{}, err
@@ -40,8 +37,8 @@ func (rt *runtime) buildService(cfg config.Config) (app.Service, error) {
 	return app.NewService(api, cfg.Token), nil
 }
 
-func (rt *runtime) writeCommandError(format string, err error) error {
-	if writeErr := rt.renderer(format).Error(err); writeErr != nil {
+func (rt *runtime) writeCommandError(err error) error {
+	if writeErr := rt.renderer().Error(err); writeErr != nil {
 		return writeErr
 	}
 	return err
@@ -55,21 +52,17 @@ func newAuthCommand(rt *runtime) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := rt.loadConfig()
 			if err != nil {
-				return rt.writeCommandError(config.DefaultOutput, err)
+				return rt.writeCommandError(err)
 			}
 
 			if err := cfg.RequireToken(); err != nil {
-				return rt.writeCommandError(cfg.Output, err)
-			}
-			if err := cfg.RequireBaseURL(); err != nil {
-				return rt.writeCommandError(cfg.Output, err)
+				return rt.writeCommandError(err)
 			}
 
 			data := map[string]string{
-				"baseUrl": cfg.BaseURL,
-				"status":  "configured",
+				"status": "configured",
 			}
-			return rt.renderer(cfg.Output).Success("Authentication configured successfully.", data)
+			return rt.renderer().Success("Authentication configured successfully.", data)
 		},
 	}
 }
@@ -86,21 +79,21 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := rt.loadConfig()
 			if err != nil {
-				return rt.writeCommandError(config.DefaultOutput, err)
+				return rt.writeCommandError(err)
 			}
 
 			service, err := rt.buildService(cfg)
 			if err != nil {
-				return rt.writeCommandError(cfg.Output, err)
+				return rt.writeCommandError(err)
 			}
 
 			query, err := parseQueryPairs(queryPairs)
 			if err != nil {
-				return rt.writeCommandError(cfg.Output, err)
+				return rt.writeCommandError(err)
 			}
 			headers, err := parseHeaderPairs(headerPairs)
 			if err != nil {
-				return rt.writeCommandError(cfg.Output, err)
+				return rt.writeCommandError(err)
 			}
 
 			var rawBody json.RawMessage
@@ -116,9 +109,9 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 				Body:    rawBody,
 			})
 			if err != nil {
-				return rt.writeCommandError(cfg.Output, err)
+				return rt.writeCommandError(err)
 			}
-			return rt.renderer(cfg.Output).Success(formatHTTPResponse(response), response)
+			return rt.renderer().Success(formatHTTPResponse(response), response)
 		},
 	}
 
@@ -148,16 +141,11 @@ func newAPICommand(rt *runtime) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := rt.loadConfig()
-			if err != nil {
-				return rt.writeCommandError(config.DefaultOutput, err)
-			}
-
 			message, data, err := runAPIQuery(cmd, provider, args, full)
 			if err != nil {
-				return rt.writeCommandError(cfg.Output, err)
+				return rt.writeCommandError(err)
 			}
-			return rt.renderer(cfg.Output).Success(message, data)
+			return rt.renderer().Success(message, data)
 		},
 	}
 
@@ -172,15 +160,11 @@ func newVersionCommand(rt *runtime) *cobra.Command {
 		Short: "Print CLI version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := rt.loadConfig()
-			if err != nil {
-				return rt.writeCommandError(config.DefaultOutput, err)
-			}
 			data := map[string]string{
 				"name":    config.AppName,
 				"version": config.Version,
 			}
-			return rt.renderer(cfg.Output).Success(fmt.Sprintf("%s %s", config.AppName, config.Version), data)
+			return rt.renderer().Success(fmt.Sprintf("%s %s", config.AppName, config.Version), data)
 		},
 	}
 }

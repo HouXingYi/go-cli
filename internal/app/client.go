@@ -26,7 +26,7 @@ func NewService(api APIClient, token string) Service {
 
 func (s Service) requireToken() error {
 	if s.token == "" {
-		return apperr.New(apperr.KindConfig, "token is required", "pass --token or set ZINIAO_TOKEN.")
+		return apperr.New(apperr.KindConfig, "token is required", "set ZINIAO_TOKEN.")
 	}
 	return nil
 }

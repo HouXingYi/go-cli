@@ -20,67 +20,31 @@ Commands:
 
 不带子命令运行 `zn-cli` 时显示帮助信息。
 
-## 全局参数
+## 环境变量与内置常量
 
-所有子命令共享以下全局参数（定义于 `internal/cli/root.go`）：
+配置层使用 Viper（`internal/config`）读取环境变量，当前仅暴露一项用户配置：
 
-| 参数 | 环境变量 | 说明 |
+| 环境变量 | 说明 |
+| --- | --- |
+| `ZINIAO_TOKEN` | 访问 token，HTTP 请求以 `Authorization: Bearer <token>` 发送 |
+
+以下值为内置常量（`internal/config/config.go`），当前不可通过 CLI 或环境变量修改：
+
+| 常量 | 当前值 | 说明 |
 | --- | --- | --- |
-| `--config <path>` | — | 配置文件路径；未指定时查找当前目录和用户主目录下的 `.ziniao.yaml` |
-| `--token <token>` | `ZINIAO_TOKEN` | 访问 token，HTTP 请求以 `Authorization: Bearer <token>` 发送 |
-| `--base-url <url>` | `ZINIAO_BASE_URL` | HTTP API 基础地址，须为完整 URL，例如 `https://api.example.com` |
-| `--timeout <duration>` | `ZINIAO_TIMEOUT` | HTTP 请求超时，默认 `10s`，支持 `500ms`、`10s`、`1m` 等 |
-| `--output <format>` | `ZINIAO_OUTPUT` | 输出格式：`text`（默认）或 `json` |
-| `--verbose` | `ZINIAO_VERBOSE` | 启用详细日志（当前已注册，尚未在业务逻辑中消费） |
-
-配置优先级从高到低：命令行参数 → 环境变量 → 配置文件 → 默认值。
-
-配置文件示例（`.ziniao.yaml`）：
-
-```yaml
-base_url: "https://api.example.com"
-token: "your-token"
-timeout: "10s"
-output: "text"
-verbose: false
-```
+| `DefaultBaseURL` | `https://gateway.ziniao.com` | HTTP API 基础地址 |
+| `DefaultTimeout` | `10s` | HTTP 请求超时 |
 
 ## 输出格式
 
-### text（默认）
-
-成功时向 stdout 输出人类可读消息；失败时向 stderr 输出错误与提示：
+当前 CLI 固定使用 text 输出。成功时向 stdout 输出人类可读消息；失败时向 stderr 输出错误与提示：
 
 ```text
 Error: token is required
-Hint: pass --token or set ZINIAO_TOKEN.
+Hint: set ZINIAO_TOKEN.
 ```
 
-### json
-
-成功时输出结构化信封：
-
-```json
-{
-  "success": true,
-  "data": { }
-}
-```
-
-失败时：
-
-```json
-{
-  "success": false,
-  "error": {
-    "message": "token is required",
-    "hint": "pass --token or set ZINIAO_TOKEN.",
-    "kind": "config"
-  }
-}
-```
-
-错误 `kind` 取值：`config`、`network`、`auth`、`api`、`output`。
+`internal/output` 包保留 json 输出能力，后续可通过 Viper 扩展 `--output` 等配置项。
 
 ---
 
@@ -88,7 +52,7 @@ Hint: pass --token or set ZINIAO_TOKEN.
 
 ### `zn-cli auth`
 
-**说明：** 校验本地鉴权配置是否完整（`token` 与 `base_url` 均已提供且 `base_url` 格式合法）。当前实现**不会**向后端发送请求，也**不会**将配置写入磁盘。
+**说明：** 校验 `ZINIAO_TOKEN` 环境变量是否已设置。当前实现**不会**向后端发送请求，也**不会**将配置写入磁盘。
 
 **命令：**
 
@@ -96,41 +60,30 @@ Hint: pass --token or set ZINIAO_TOKEN.
 zn-cli auth
 ```
 
-**参数：** 无（继承全局参数）。
+**参数：** 无。
 
 **前置条件：**
 
-- `token` 非空
-- `base_url` 为合法的绝对 URL
+- `ZINIAO_TOKEN` 非空
 
 **输出：**
-
-text 模式：
 
 ```text
 Authentication configured successfully.
 ```
 
-json 模式 `data` 字段：
-
-```json
-{
-  "baseUrl": "https://api.example.com",
-  "status": "configured"
-}
-```
-
 **示例：**
 
 ```bash
-zn-cli auth --base-url https://api.example.com --token your-token
+export ZINIAO_TOKEN=your-token
+zn-cli auth
 ```
 
 ---
 
 ### `zn-cli http`
 
-**说明：** 向 `base_url` 拼接后的目标路径发送带 Bearer Token 的 HTTP 请求，并打印响应。
+**说明：** 向内置 `DefaultBaseURL`（`https://gateway.ziniao.com`）拼接后的目标路径发送带 Bearer Token 的 HTTP 请求，并打印响应。
 
 **命令：**
 
@@ -155,12 +108,12 @@ zn-cli http <method> <path> [flags]
 
 **请求行为：**
 
-- 目标 URL：`base_url` + `path` + query 参数
+- 目标 URL：`DefaultBaseURL` + `path` + query 参数
 - 自动设置 `Accept: application/json`
 - 有 body 时自动设置 `Content-Type: application/json`（除非已通过 `--header` 指定）
 - 自动设置 `Authorization: Bearer <token>`
 
-**前置条件：** 需要有效的 `token` 与 `base_url`。
+**前置条件：** 需要设置 `ZINIAO_TOKEN`。
 
 **输出：**
 
@@ -170,17 +123,6 @@ text 模式打印格式化后的响应内容：
 - 响应体为空时，输出 HTTP 状态行（例如 `200 OK`）
 - 否则原样输出响应体文本
 
-json 模式 `data` 字段为响应结构：
-
-```json
-{
-  "statusCode": 200,
-  "status": "200 OK",
-  "headers": { },
-  "body": { }
-}
-```
-
 **错误处理：**
 
 | HTTP 状态码 | 错误 kind | 典型 hint |
@@ -188,11 +130,12 @@ json 模式 `data` 字段为响应结构：
 | 401 | `auth` | check whether the token is valid or expired. |
 | 403 | `auth` | check whether the token has permission for this API. |
 | 其他非 2xx | `api` | check the API response and request parameters. |
-| 超时 | `network` | increase --timeout or check network connectivity. |
+| 超时 | `network` | check network connectivity. |
 
 **示例：**
 
 ```bash
+export ZINIAO_TOKEN=your-token
 zn-cli http GET /api/user/list --query page=1 --query pageSize=20
 zn-cli http POST /api/user/create --body '{"name":"test"}'
 zn-cli http POST /api/user/create --query page=1 --header X-Test=yes --body '{"name":"test"}'
@@ -204,7 +147,7 @@ zn-cli http POST /api/user/create --query page=1 --header X-Test=yes --body '{"n
 
 **说明：** 按三层结构渐进式查看 HTTP API 目录：一级大模块 → 二级业务模块 → 三级具体 API。
 
-**当前实现：** 目录数据来自内置 `MockProvider`（`internal/catalog/catalog.go`），**尚未**对接后端动态目录接口。命令执行时不依赖 `token` 与 `base_url`（仅读取配置以确定输出格式）。
+**当前实现：** 目录数据来自内置 `MockProvider`（`internal/catalog/catalog.go`），**尚未**对接后端动态目录接口。命令执行时不依赖 `ZINIAO_TOKEN`。
 
 **命令：**
 
@@ -421,23 +364,12 @@ zn-cli api ziniao user list
 zn-cli version
 ```
 
-**参数：** 无（继承全局参数）。
+**参数：** 无。
 
 **输出：**
 
-text 模式：
-
 ```text
 zn-cli 0.1.0
-```
-
-json 模式 `data` 字段：
-
-```json
-{
-  "name": "zn-cli",
-  "version": "0.1.0"
-}
 ```
 
 ---
@@ -459,12 +391,9 @@ json 模式 `data` 字段：
 
 | 错误信息 | 原因 | 处理建议 |
 | --- | --- | --- |
-| `token is required` | 未提供 token | 使用 `--token`、`ZINIAO_TOKEN` 或配置文件 |
-| `base_url is required` | 未提供基础地址 | 使用 `--base-url`、`ZINIAO_BASE_URL` 或配置文件 |
-| `base_url is invalid` | URL 格式不合法 | 使用完整 URL，例如 `https://api.example.com` |
+| `token is required` | 未设置 `ZINIAO_TOKEN` | 执行 `export ZINIAO_TOKEN=...` |
 | `path is invalid` | `http` 命令 path 不以 `/` 开头 | 使用 `/api/...` 形式 |
 | `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
 | `invalid key=value pair` | `--query` 或 `--header` 格式错误 | 使用 `key=value` 格式 |
-| `output format is invalid` | `--output` 值非法 | 仅支持 `text` 或 `json` |
-| `request timed out` | 请求超时 | 增大 `--timeout` 或检查网络 |
+| `request timed out` | 请求超时 | 检查网络连接 |
 | `module/business/api "..." not found` | 目录中无对应项 | 运行 `zn-cli api` 查看可用目录 |

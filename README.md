@@ -1,6 +1,22 @@
 # ziniao
 
-`ziniao` 是一个使用 Go 编写的、基于 token 调用 HTTP 接口的命令行工具。项目将命令解析、运行时配置、应用用例、HTTP 通信和输出格式化分层处理，方便后续新增命令和接口能力。
+`ziniao` 是一个使用 Go 编写的、基于 token 调用 HTTP 接口的命令行工具。CLI 名称为 `zn-cli`（当前版本 `0.1.0`），构建产物通常命名为 `ziniao` 或 `ziniao.exe`。项目将命令解析、运行时配置、应用用例、HTTP 通信和输出格式化分层处理，方便后续新增命令和接口能力。
+
+完整命令说明见 [docs/cli-api-docs.md](docs/cli-api-docs.md)。
+
+## 命令总览
+
+```text
+zn-cli [command] [flags]
+
+Commands:
+  auth      校验本地鉴权配置
+  http      发送带 Bearer Token 的 HTTP 请求
+  api       查看 HTTP API 目录
+  version   查看 CLI 版本
+```
+
+不带子命令运行时显示帮助信息。
 
 ## 从源码构建
 
@@ -62,89 +78,57 @@ chmod +x dist/ziniao-linux-amd64
 ziniao --help
 ```
 
-验证 token：
+校验本地鉴权配置（不会向后端发请求，也不会写入磁盘）：
 
 ```bash
-ziniao auth verify \
-  --base-url https://api.example.com \
-  --token your-token
+export ZINIAO_TOKEN=your-token
+ziniao auth
 ```
 
-执行当前请求流程：
+发送 HTTP 请求（请求发往内置 API 基础地址 `https://gateway.ziniao.com`）：
 
 ```bash
-ziniao request run \
-  --base-url https://api.example.com \
-  --token your-token
+export ZINIAO_TOKEN=your-token
+ziniao http GET /api/user/list --query page=1 --query pageSize=20
+ziniao http POST /api/user/create --body '{"name":"test"}'
 ```
 
-输出 JSON：
+查看 API 目录（当前使用内置 Mock 数据，不依赖 token）：
 
 ```bash
-ziniao auth verify \
-  --base-url https://api.example.com \
-  --token your-token \
-  --output json
+ziniao api
+ziniao api ziniao user
+ziniao api ziniao user list
+```
+
+查看版本：
+
+```bash
+ziniao version
 ```
 
 ## 配置
 
-配置优先级如下：
+当前唯一用户可配置项为环境变量 `ZINIAO_TOKEN`，通过 Viper 读取（`internal/config` 保留 Viper 基础设施，便于后续扩展更多配置项）。
 
-1. 命令行参数。
-2. 环境变量。
-3. 配置文件。
-4. 默认值。
+| 环境变量 | 说明 |
+| --- | --- |
+| `ZINIAO_TOKEN` | 访问 token，HTTP 请求以 `Authorization: Bearer <token>` 发送 |
 
-全局参数：
+以下值当前为内置常量（定义于 `internal/config/config.go`），不可通过命令行或环境变量修改：
 
-```bash
---config <path>       配置文件路径
---token <token>       访问 token
---base-url <url>      HTTP API 基础地址
---timeout <duration>  HTTP 请求超时时间，默认 10s
---output <format>     输出格式，支持 text 或 json
---verbose             启用更详细日志
-```
+| 常量 | 当前值 | 说明 |
+| --- | --- | --- |
+| `DefaultBaseURL` | `https://gateway.ziniao.com` | HTTP API 基础地址 |
+| `DefaultTimeout` | `10s` | HTTP 请求超时 |
 
-环境变量：
+## 输出格式
 
-```bash
-ZINIAO_BASE_URL=https://api.example.com
-ZINIAO_TOKEN=your-token
-ZINIAO_TIMEOUT=10s
-ZINIAO_OUTPUT=json
-```
-
-配置文件示例：
-
-```yaml
-base_url: "https://api.example.com"
-token: ""
-timeout: "10s"
-output: "text"
-```
-
-默认情况下，CLI 会在当前目录和用户主目录查找 `.ziniao.yaml`。也可以通过 `--config` 显式指定配置文件路径。
+当前 CLI 固定使用 text 输出：成功时向 stdout 输出人类可读消息；失败时向 stderr 输出错误与提示。
 
 ## Token 安全
 
-当前版本不会主动把 token 写入本地配置。一次性使用时可以通过 `--token` 传入，本地自动化场景可以使用 `ZINIAO_TOKEN`。错误信息和普通输出不应回显完整 token。
-
-## 当前 API 占位
-
-在真实 API 契约确认前，CLI 暂时使用以下占位接口：
-
-```text
-GET /auth/verify
-GET /request/run
-```
-
-两个请求都使用 Bearer Token 鉴权：
-
-```http
-Authorization: Bearer <token>
-```
+token 仅通过环境变量 `ZINIAO_TOKEN` 提供，不提供 `--token` 命令行参数。错误信息和普通输出不会回显 token。
 
 ## 开发
 
@@ -176,25 +160,13 @@ bash scripts/build-all.sh
 
 ## 常见问题
 
-### token is required
+| 错误信息 | 原因 | 处理建议 |
+| --- | --- | --- |
+| `token is required` | 未设置 `ZINIAO_TOKEN` | 执行 `export ZINIAO_TOKEN=...` |
+| `path is invalid` | `http` 命令 path 不以 `/` 开头 | 使用 `/api/...` 形式 |
+| `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
+| `invalid key=value pair` | `--query` 或 `--header` 格式错误 | 使用 `key=value` 格式 |
+| `request timed out` | 请求超时 | 检查网络连接 |
+| `module/business/api "..." not found` | 目录中无对应项 | 运行 `ziniao api` 查看可用目录 |
 
-通过 `--token` 传入 token，或设置 `ZINIAO_TOKEN`。
-
-### base_url is required
-
-通过 `--base-url` 传入接口基础地址，或设置 `ZINIAO_BASE_URL`。
-
-### unauthorized
-
-token 可能无效、已过期，或缺少访问目标接口的权限。
-
-### request timed out
-
-可以增加超时时间：
-
-```bash
-ziniao request run \
-  --base-url https://api.example.com \
-  --token your-token \
-  --timeout 30s
-```
+HTTP 401/403 时错误 kind 为 `auth`，其他非 2xx 为 `api`。更多细节见 [docs/cli-api-docs.md](docs/cli-api-docs.md)。
