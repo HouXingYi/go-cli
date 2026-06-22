@@ -11,6 +11,7 @@
 | 日期 | 变更内容 |
 | --- | --- |
 | 2026-06-17 初版 | CLI 代理鉴权体系 + 多服务商 Provider 注册表 + API 目录查询 |
+| 2026-06-22 | 加密算法升级：对齐 2026-06-11-web-session-auth-design §7.1，由 AES/CBC/NoPadding 改为 AES-256-GCM + HKDF |
 
 ---
 
@@ -239,9 +240,12 @@ async def resolve_auth(provider: ProviderConfig, user_id: str, company_id: str, 
     match provider.auth_type:
         case "web_session":
             return await get_or_refresh_web_session(user_id, session_id)
-            # → AuthHeaders(authorization="Bearer <access_token>",
-            #               encrypt=WebSessionEncrypt(web_session_key))
-            # 请求体需 AES 加密，响应体需 AES 解密
+            # → AuthHeaders(
+            #       authorization="Bearer <access_token>",
+            #       client_platform="claw-agent-cli",
+            #       encrypt=WebSessionGcmEncrypt(web_session_key, machine_string),
+            #   )
+            # 请求体需 AES-256-GCM 加密（HKDF 派生密钥），响应体需 AES-256-GCM 解密
         case "app_key":
             app_key = await fetch_company_app_key(int(company_id))
             # → AuthHeaders(authorization="Bearer <app_key>",
@@ -312,11 +316,12 @@ POST /vendor-proxy/cli/{provider}/{path}
    app_key     → fetch_company_app_key(company_id)
 4. 拼接目标 URL：path_template.format(rest=path, svc=provider.svc)
 5. 构造请求：
-   web_session → AES 加密 body → {data: "<密文>"}
+   web_session → AES-256-GCM 加密 body（wire 格式）→ {data: "<密文>"}
    app_key     → 明文 body
+   设置 client-platform Header（web_session 模式设为 "claw-agent-cli"）
 6. 转发 → 获取响应
 7. 处理响应：
-   web_session → AES 解密 → 取内层 ret/status/msg/data
+   web_session → AES-256-GCM 解密（校验时间窗口 + AAD）→ 取内层 ret/status/msg/data
    app_key     → 原样返回
 8. 返回给沙箱
 ```
@@ -634,7 +639,7 @@ src/core/api_catalog/
 | 边界 | 鉴权方式 | 密钥持有方 |
 |------|---------|-----------|
 | 沙箱 → 本服务 | HMAC session_token | 沙箱持有 session_token，本服务持有 VENDOR_PROXY_SECRET |
-| 本服务 → web session 网关 | JWT access_token + AES 加密 | 仅本服务持有 web_session_key / access_token |
+| 本服务 → web session 网关 | JWT access_token + AES-256-GCM 加密 | 仅本服务持有 web_session_key / access_token |
 | 本服务 → ERP | app_key Bearer token | 仅本服务持有（查表） |
 
 ### 7.2 凭证隔离
@@ -683,45 +688,151 @@ src/core/api_catalog/
 
 ---
 
-## 八、AES 加解密实现要点
+## 八、AES-256-GCM 加解密实现要点
 
 ### 8.1 算法
 
-沿用文档 §2.2 的 AES/CBC/NoPadding 算法：
+沿用文档 §7.1 的 AES-256-GCM + HKDF 算法，替换原 AES/CBC/NoPadding。
+
+**本服务作为后端代理**，设置 `client-platform: claw-agent-cli`，网关据此选择 GCM 解密路径（非 `zn_browser` 均走 GCM，见 web session 文档 §7.1.1 服务端校验逻辑）。
+
+**密钥派生（HKDF-SHA256）**：
 
 ```
-加密/解密密钥 = web_session_key（Base64 解码后的原始字节）
+ikm    = web_session_key（Base64 解码后的原始字节）
+salt   = machine_string 的 UTF-8 字节，即 "sandbox_" + session_id（见 §3.2）
+info   = client-platform 的 UTF-8 字节，本服务固定 "claw-agent-cli"
+encKey = HKDF-SHA256(ikm, salt, info, 32)  → 256-bit AES 密钥
 ```
 
-| 角色 | 操作 | key 范围 | IV 范围 |
-|------|------|---------|--------|
-| 本服务 | 加密请求 → 网关 | `[0, 16)` | `[len-16, len)` |
-| 本服务 | 解密网关响应 | `[1, 17)` | `[len-17, len-1)` |
+> `machine_string` 和 `client-platform` 必须与网关注册会话时使用的值一致：`machine_string` 对应 JWT `mid` 字段，`client-platform` 对应请求 Header。
+
+**wire 格式**（与 §7.1.1 完全一致）：
+
+```
+wire = nonce[12B] || aad_len[2B, big-endian] || aad[NB] || ciphertext || tag[16B]
+data = Base64(wire)
+
+nonce = timestampSeconds(4B, big-endian) || random(8B)
+aad   = UTF-8("{platform}:{machineString}:{timestampSeconds}")
+        示例："claw-agent-cli:sandbox_{session_id}:1750207320"
+```
+
+| 段 | 长度 | 说明 |
+|---|---|---|
+| `nonce` | 12 字节 | timestamp(4B) 用于时间窗口校验 + random(8B) 防碰撞 |
+| `aad_len` | 2 字节 | big-endian uint16 |
+| `aad` | 变长 | 明文但受 tag 保护，任何字段被改则解密失败 |
+| `ciphertext + tag` | 变长 + 16B | AES-GCM 密文及认证 tag（128 bit） |
+
+**网关侧校验顺序**（由网关执行，本服务需确保数据正确构造）：
+
+```
+1. 读 client-platform Header → "claw-agent-cli" → 选择 GCM 路径
+2. Base64 解码 wire，切分 nonce / aad_len / aad / cipherTag
+3. nonce[0..4] 提取时间戳，校验 |nowTs - ts| ≤ 300 秒
+4. 解析 aad，校验 platform == Header client-platform、machineString == JWT mid
+5. HKDF 派生 encKey（Redis web_session_key + JWT mid + "claw-agent-cli"）
+6. GCM 解密（传入相同 aad，自动验 tag）
+   ├─ AEADBadTagException → { ret:10000, msg:"解密失败" }
+   └─ 成功 → 明文 JSON
+```
 
 ### 8.2 依赖
 
-- `pycryptodome`（已有，用于 HuBu RSA）
-- 需确认 `Crypto.Cipher.AES` 支持 CBC/NoPadding
+- `cryptography` 库（推荐，内置 `HKDF` + `AES-GCM`，无需手动处理 padding）
+- 项目已有 `cryptography` 依赖（用于其他加密场景），无需新增
 
 ### 8.3 实现模块
 
 新增 `src/util/web_session_crypto.py`：
-- `encrypt_request(plain: dict, web_session_key: bytes) -> str` — 返回 Base64 密文
-- `decrypt_response(data: str, web_session_key: bytes) -> dict` — 返回解密后的 JSON
-- `_get_key_iv(ws_key: bytes, mode: str) -> tuple[bytes, bytes]` — 按规范截取 key/IV
-
-### 8.4 Padding
-
-网关使用 NoPadding，需调用方手动 PKCS7 padding：
 
 ```python
-def _pkcs7_pad(data: bytes, block_size: int = 16) -> bytes:
-    pad_len = block_size - len(data) % block_size
-    return data + bytes([pad_len] * pad_len)
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes
+import os, time, struct, base64
 
-def _pkcs7_unpad(data: bytes) -> bytes:
-    pad_len = data[-1]
-    return data[:-pad_len]
+NONCE_LEN = 12
+TAG_LEN = 16  # GCM tag, 128 bit
+TIME_WINDOW = 300  # 秒
+
+
+def derive_key(web_session_key: bytes, machine_string: str, platform: str = "claw-agent-cli") -> bytes:
+    """HKDF-SHA256 派生 32 字节 AES-256 密钥."""
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=machine_string.encode("utf-8"),
+        info=platform.encode("utf-8"),
+    ).derive(web_session_key)
+
+
+def encrypt_request(plain: dict, web_session_key: bytes, machine_string: str) -> str:
+    """加密请求体，返回 Base64 wire 格式密文."""
+    key = derive_key(web_session_key, machine_string)
+    ts = int(time.time())
+    nonce = struct.pack(">I", ts) + os.urandom(8)
+    aad = f"claw-agent-cli:{machine_string}:{ts}".encode("utf-8")
+    aad_len = struct.pack(">H", len(aad))
+
+    aesgcm = AESGCM(key)
+    ct = aesgcm.encrypt(nonce, json.dumps(plain).encode("utf-8"), aad)
+
+    wire = nonce + aad_len + aad + ct
+    return base64.b64encode(wire).decode("ascii")
+
+
+def decrypt_response(data: str, web_session_key: bytes, machine_string: str) -> dict:
+    """解密网关响应，校验时间窗口与 AAD，返回 JSON."""
+    key = derive_key(web_session_key, machine_string)
+    wire = base64.b64decode(data)
+
+    off = 0
+    nonce = wire[off:off + NONCE_LEN]; off += NONCE_LEN
+    aad_len = struct.unpack(">H", wire[off:off + 2])[0]; off += 2
+    aad = wire[off:off + aad_len]; off += aad_len
+    ct = wire[off:]
+
+    ts = struct.unpack(">I", nonce[:4])[0]
+    if abs(int(time.time()) - ts) > TIME_WINDOW:
+        raise RequestExpiredError(f"请求已过期: ts={ts}")
+
+    aad_str = aad.decode("utf-8")
+    parts = aad_str.split(":", 2)
+    if len(parts) != 3 or parts[0] != "claw-agent-cli" or parts[1] != machine_string:
+        raise SecurityError(f"AAD 校验失败: {aad_str}")
+
+    aesgcm = AESGCM(key)
+    plain = aesgcm.decrypt(nonce, ct, aad)
+    return json.loads(plain)
+```
+
+### 8.4 与旧版（CBC）的关键差异
+
+| 维度 | 旧 AES/CBC/NoPadding | 新 AES-256-GCM |
+|------|---------------------|----------------|
+| 密钥 | web_session_key 直接切片 | HKDF 派生，绑定 machine_string + platform |
+| IV/Nonce | 从密钥尾部截取 | 随机生成，嵌时间戳 |
+| 完整性 | 无（需额外 HMAC） | AEAD tag 自动校验 |
+| 防重放 | 无 | nonce 时间窗口 ±300s |
+| AAD 绑定 | 无 | 绑定 platform + machine_string + 时间戳 |
+| Padding | 手动 PKCS7 | GCM 流式，无需 padding |
+| 加密库 | pycryptodome | cryptography (AESGCM + HKDF) |
+
+### 8.5 响应解密流程
+
+与请求加密对称，但本服务作为调用方解密网关返回的加密响应。流程与 §7.1.1 一致：
+
+```
+1. 检查 HTTP body 是否包含明文 ret 字段（有则网关返回明文错误，无需解密）
+2. 取 body.data，Base64 解码
+3. 切分 nonce / aad_len / aad / cipherTag
+4. 校验时间窗口（±300 秒）
+5. 校验 AAD 中 platform、machineString
+6. HKDF 派生密钥（复用 Redis 中的 web_session_key + local machine_string + "claw-agent-cli"）
+7. GCM 解密（自动验 tag）
+8. 返回内层 { ret, status, msg, data }
 ```
 
 ---
