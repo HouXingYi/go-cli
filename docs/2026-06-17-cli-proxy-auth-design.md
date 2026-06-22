@@ -12,6 +12,7 @@
 | --- | --- |
 | 2026-06-17 初版 | CLI 代理鉴权体系 + 多服务商 Provider 注册表 + API 目录查询 |
 | 2026-06-22 | 加密算法升级：对齐 2026-06-11-web-session-auth-design §7.1，由 AES/CBC/NoPadding 改为 AES-256-GCM + HKDF |
+| 2026-06-22 v2 | 鉴权方式变更：沙箱 → 本服务由 HMAC session_token 改为 cli_auth_key Bearer token + DB 查表；新增 `t_cli_auth_key` 表；`session_id` 不再参与身份解析 |
 
 ---
 
@@ -28,7 +29,7 @@
 
 ### 1.2 目标
 
-1. **代理转发**：沙箱通过 HMAC session_token 调用本服务，本服务按服务商的鉴权方式加密/签名后转发
+1. **代理转发**：沙箱通过 `cli_auth_key` Bearer token 调用本服务，本服务按服务商的鉴权方式加密/签名后转发
 2. **凭证管理**：懒加载 web session 凭证，自动刷新，对调用方透明
 3. **API 目录**：后端动态返回可用接口的 OpenAPI 格式目录，三层渐进披露（模块 → 业务 → API）
 4. **可扩展**：新增服务商只需注册，不改路由逻辑
@@ -42,7 +43,7 @@
 │ 沙箱环境                                                  │
 │  LLM → Function Call → zn-cli http <method> <path>      │
 │                       → zn-cli api [module] [business]   │
-│                          └─ HMAC session_token ──┐       │
+│                          └─ Bearer cli_auth_key ──┐       │
 └──────────────────────────────────────────────────┼───────┘
                                                     │
                                                     ▼
@@ -77,32 +78,58 @@
 ## 三、身份映射链路
 
 ```
-session_token (HMAC)
-  → validate_session_token() → session_id
-  → t_enterprise_manage_chat_thread → user_id + company_id
+Authorization: Bearer <cli_auth_key>
+  → lookup t_cli_auth_key → user_id + company_id
+  → AuthStrategy.resolve(user_id, company_id) → upstream 凭证
   → Redis cli_web_session:{user_id} → 凭证
 ```
 
-### 3.1 现有依赖
+### 3.1 cli_auth_key 生命周期
+
+| 阶段 | 操作 |
+|------|------|
+| 创建沙箱 | 按 `user_id` 查 `t_cli_auth_key` → 存在则复用，不存在则 `secrets.token_urlsafe(32)` 生成新 key → 写入 DB，`user_id` 为唯一键 |
+| 注入沙箱 | `CLI_AUTH_KEY` 环境变量，值即为 `cli_auth_key` |
+| CLI 调用 | `Authorization: Bearer <cli_auth_key>` 请求头 |
+| 服务端验证 | 查 `t_cli_auth_key WHERE cli_auth_key = ?` → 取 `user_id` + `company_id`，不存在则 401 |
+
+> **设计意图**：`cli_auth_key` 与 `user_id` 终身一对一绑定，不可轮换。后续权限控制可在此表扩展字段（如 `allowed_providers`、`rate_limit` 等）。
+
+### 3.2 现有依赖
 
 | 组件 | 说明 |
 |------|------|
-| `vendor_proxy_token.py` | HMAC session_token 签发/验证，`session_id.expiry_ts.hmac` 格式 |
-| `t_enterprise_manage_chat_thread` | 存 `thread_id`(session_id)、`user_id`、`company_id` |
-| `VENDOR_PROXY_SECRET` | HMAC 签名密钥，已存在 |
+| `t_cli_auth_key` | **新增**：存 `user_id`（unique）、`company_id`、`cli_auth_key`（unique） |
+| `t_enterprise_manage_chat_thread` | 不再用于 CLI proxy 身份解析 |
 
-### 3.2 machine_string 策略
+### 3.3 machine_string 策略
+
+machine_string 用于 upstream 网关 web_session 协议（HKDF salt + AAD + JWT `mid`），与 cli_auth_key 鉴权路径无关。
 
 | 场景 | machine_string |
 |------|---------------|
-| 调网关接口 1 | `"sandbox_" + session_id` |
-| 网关 Redis Key | `session:{uid}:sandbox_{session_id}` |
+| 调网关接口 1 | `"sandbox_" + user_id` |
+| 网关 Redis Key | `session:{uid}:sandbox_{user_id}` |
 
 ---
 
 ## 四、数据模型
 
 ### 4.1 新增数据库表
+
+#### t_cli_auth_key
+
+CLI 代理鉴权密钥表，与 user_id 终身一对一绑定。后续权限控制可在此表扩展字段。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | BIGINT PK | 自增主键 |
+| `user_id` | VARCHAR(64) UNIQUE | 所属用户 ID，一个用户只有一条记录 |
+| `company_id` | VARCHAR(64) | 所属企业 ID |
+| `cli_auth_key` | VARCHAR(128) UNIQUE | 鉴权密钥，`secrets.token_urlsafe(32)` 生成 |
+
+> **生成时机**：沙箱创建时，按 `user_id` 查表 → 存在则复用，不存在则生成新 key 写入 DB。
+> **鉴权方式**：CLI 调用时通过 `Authorization: Bearer <cli_auth_key>` 传递，服务端查表获取 `user_id` + `company_id`。
 
 #### t_cli_api_module
 
@@ -136,7 +163,7 @@ Provider 一级模块定义，每行一个 service provider。
 | `example` | JSON | 请求/响应完整示例（x-example） |
 | `errors` | JSON | 常见错误码及处理建议（x-errors） |
 
-> 无需 `api_key` 表。身份通过 `session_id → user_id` 解析。
+> 身份通过 `cli_auth_key → 查 t_cli_auth_key → user_id + company_id` 解析。
 
 ### 4.2 Redis 新增键
 
@@ -175,6 +202,7 @@ Fields:
       │   响应解密后拿到: web_session_key, access_token, expire_at,
       │                   refresh_token, refresh_code
       │   expire_at = 网关明文返回的过期时间戳（毫秒）
+      │   machine_string = "sandbox_" + user_id
       ├─ 所有字段（含 expire_at）缓存到 cli_web_session:{user_id}
       └─ 返回凭证
 
@@ -236,15 +264,16 @@ PROVIDERS: dict[str, ProviderConfig] = {
 ### 5.3 鉴权策略
 
 ```python
-async def resolve_auth(provider: ProviderConfig, user_id: str, company_id: str, session_id: str):
+async def resolve_auth(provider: ProviderConfig, user_id: str, company_id: str):
     match provider.auth_type:
         case "web_session":
-            return await get_or_refresh_web_session(user_id, session_id)
+            return await get_or_refresh_web_session(user_id)
             # → AuthHeaders(
             #       authorization="Bearer <access_token>",
             #       client_platform="claw-agent-cli",
             #       encrypt=WebSessionGcmEncrypt(web_session_key, machine_string),
             #   )
+            # machine_string = "sandbox_" + user_id
             # 请求体需 AES-256-GCM 加密（HKDF 派生密钥），响应体需 AES-256-GCM 解密
         case "app_key":
             app_key = await fetch_company_app_key(int(company_id))
@@ -263,7 +292,7 @@ async def resolve_auth(provider: ProviderConfig, user_id: str, company_id: str, 
 POST /vendor-proxy/cli/{provider}/{path}
 ```
 
-**鉴权**：`Authorization: Bearer <session_token>`（HMAC）
+**鉴权**：`Authorization: Bearer <cli_auth_key>`
 
 **Request Body**：
 
@@ -309,21 +338,20 @@ POST /vendor-proxy/cli/{provider}/{path}
 **处理流程**：
 
 ```
-1. HMAC 校验 session_token → session_id
-2. 查 t_enterprise_manage_chat_thread → user_id, company_id
-3. match provider.auth_type:
-   web_session → get_or_refresh_web_session(user_id, session_id)
+1. 查 t_cli_auth_key → user_id, company_id
+2. match provider.auth_type:
+   web_session → get_or_refresh_web_session(user_id)
    app_key     → fetch_company_app_key(company_id)
-4. 拼接目标 URL：path_template.format(rest=path, svc=provider.svc)
-5. 构造请求：
+3. 拼接目标 URL：path_template.format(rest=path, svc=provider.svc)
+4. 构造请求：
    web_session → AES-256-GCM 加密 body（wire 格式）→ {data: "<密文>"}
    app_key     → 明文 body
    设置 client-platform Header（web_session 模式设为 "claw-agent-cli"）
-6. 转发 → 获取响应
-7. 处理响应：
+5. 转发 → 获取响应
+6. 处理响应：
    web_session → AES-256-GCM 解密（校验时间窗口 + AAD）→ 取内层 ret/status/msg/data
    app_key     → 原样返回
-8. 返回给沙箱
+7. 返回给沙箱
 ```
 
 ### 6.2 API 目录查询端点
@@ -334,7 +362,7 @@ POST /vendor-proxy/cli/{provider}/{path}
 GET /vendor-proxy/cli-api[/{module}]
 ```
 
-**鉴权**：与代理转发相同，`Authorization: Bearer <session_token>`
+**鉴权**：与代理转发相同，`Authorization: Bearer <cli_auth_key>`
 
 **三层渐进披露**：URL path 的 `{module}` 对应 CLI 的第一个动态参数，`?business=` 对应第二个，`?api=` 对应第三个。
 
@@ -638,7 +666,7 @@ src/core/api_catalog/
 
 | 边界 | 鉴权方式 | 密钥持有方 |
 |------|---------|-----------|
-| 沙箱 → 本服务 | HMAC session_token | 沙箱持有 session_token，本服务持有 VENDOR_PROXY_SECRET |
+| 沙箱 → 本服务 | `Bearer cli_auth_key` → DB 查表 | 沙箱持有 `CLI_AUTH_KEY` 环境变量，本服务持有 DB 表 |
 | 本服务 → web session 网关 | JWT access_token + AES-256-GCM 加密 | 仅本服务持有 web_session_key / access_token |
 | 本服务 → ERP | app_key Bearer token | 仅本服务持有（查表） |
 
@@ -647,7 +675,7 @@ src/core/api_catalog/
 - `oauth_string`：仅存于 Redis，沙箱 / LLM 不可达
 - `web_session_key` / `access_token` / `refresh_token`：仅存于 Redis + 本服务内存
 - `app_key`：仅存于 DB + 本服务内存缓存（60s TTL）
-- 沙箱只持有短期 HMAC token
+- `cli_auth_key`：沙箱持有（`CLI_AUTH_KEY` 环境变量），不可用于访问上游业务接口，仅限调用本服务代理端点
 
 ### 7.3 Token 自动刷新
 
@@ -678,8 +706,8 @@ src/core/api_catalog/
 
 | 场景 | HTTP 状态码 | ret | 说明 |
 |------|-----------|-----|------|
-| session_token 无效/过期 | 401 | — | HMAC 校验失败 |
-| session_id 未绑定 user_id | 401 | — | 表无记录 |
+| cli_auth_key 无效 | 401 | — | t_cli_auth_key 表中无记录 |
+| cli_auth_key 缺失 | 401 | — | Authorization Header 无 Bearer token |
 | oauth_string 无缓存 | 503 | — | 用户未配置鉴权凭证 |
 | 网关接口 1 调用失败 | 502 | — | 换取 Web 会话失败 |
 | access_token 刷新失败 | 502 | — | 会话刷新失败 |
@@ -700,7 +728,7 @@ src/core/api_catalog/
 
 ```
 ikm    = web_session_key（Base64 解码后的原始字节）
-salt   = machine_string 的 UTF-8 字节，即 "sandbox_" + session_id（见 §3.2）
+salt   = machine_string 的 UTF-8 字节，即 "sandbox_" + user_id（见 §3.3）
 info   = client-platform 的 UTF-8 字节，本服务固定 "claw-agent-cli"
 encKey = HKDF-SHA256(ikm, salt, info, 32)  → 256-bit AES 密钥
 ```
@@ -715,7 +743,7 @@ data = Base64(wire)
 
 nonce = timestampSeconds(4B, big-endian) || random(8B)
 aad   = UTF-8("{platform}:{machineString}:{timestampSeconds}")
-        示例："claw-agent-cli:sandbox_{session_id}:1750207320"
+        示例："claw-agent-cli:sandbox_{user_id}:1750207320"
 ```
 
 | 段 | 长度 | 说明 |
@@ -865,8 +893,8 @@ CLI_PROXY_GATEWAY_SVC: str = "ent"   # 默认服务名
 ENTERPRISE_MANAGE_AGENT_API_BASE_URL: str
 ERP_API_BASE_URL: str
 
-# HMAC（已有，复用）
-VENDOR_PROXY_SECRET: str
+# CLI 鉴权（cli_auth_key Bearer token + DB 查表，替代原 HMAC session_token 方案）
+# VENDOR_PROXY_SECRET 不再被 CLI proxy 使用
 
 # API 目录
 CLI_API_CATALOG_REFRESH_INTERVAL: int = 300  # 本地缓存定时刷新间隔（秒）
@@ -905,10 +933,13 @@ src/
 │   ├── auth/
 │   │   ├── __init__.py
 │   │   ├── base.py                     # AuthStrategy 抽象
+│   │   ├── cli_key.py                  # cli_auth_key 生成/查询
 │   │   ├── web_session.py              # web_session auth 策略
 │   │   └── app_key.py                  # app_key auth 策略
 │   ├── service.py                      # 核心代理服务（身份解析、请求构造、凭证管理）
 │   └── exceptions.py                   # CLI 代理异常
+├── model/
+│   └── cli_auth_key.py                 # 新增：t_cli_auth_key ORM
 └── util/
     └── web_session_crypto.py           # 新增：AES 加解密工具
 ```

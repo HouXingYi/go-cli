@@ -1,44 +1,39 @@
 package catalog
 
 import (
-	"context"
+	"encoding/json"
 	"testing"
-
-	"ziniao/internal/apperr"
 )
 
-func TestMockProviderListsModules(t *testing.T) {
-	provider := NewMockProvider()
-
-	items, err := provider.ListModules(context.Background())
+func TestParseModules(t *testing.T) {
+	raw := json.RawMessage(`{"items":[{"name":"ziniao","title":"紫鸟业务接口"}]}`)
+	items, err := ParseModules(raw)
 	if err != nil {
-		t.Fatalf("ListModules() error = %v", err)
+		t.Fatalf("ParseModules() error = %v", err)
 	}
-	if len(items) == 0 || items[0].Name != "ziniao" {
-		t.Fatalf("modules = %#v", items)
+	if len(items) != 1 || items[0].Name != "ziniao" {
+		t.Fatalf("items = %#v", items)
 	}
 }
 
-func TestMockProviderGetsAPIDocument(t *testing.T) {
-	provider := NewMockProvider()
-
-	doc, err := provider.GetAPI(context.Background(), "ziniao", "user", "list")
+func TestParseAPIDocument(t *testing.T) {
+	raw := json.RawMessage(`{"name":"list","title":"查询用户列表","url":"/api/user/list","method":"GET"}`)
+	doc, err := ParseAPIDocument(raw)
 	if err != nil {
-		t.Fatalf("GetAPI() error = %v", err)
+		t.Fatalf("ParseAPIDocument() error = %v", err)
 	}
 	if doc.URL != "/api/user/list" || doc.Method != "GET" {
 		t.Fatalf("doc = %#v", doc)
 	}
 }
 
-func TestMockProviderReportsUnknownAPI(t *testing.T) {
-	provider := NewMockProvider()
-
-	_, err := provider.GetAPI(context.Background(), "ziniao", "user", "missing")
-	if err == nil {
-		t.Fatal("GetAPI() error = nil, want error")
+func TestParseFullAPIsFromArray(t *testing.T) {
+	raw := json.RawMessage(`[{"name":"list","method":"GET","url":"/api/user/list"}]`)
+	items, err := ParseFullAPIs(raw)
+	if err != nil {
+		t.Fatalf("ParseFullAPIs() error = %v", err)
 	}
-	if got := apperr.Kind(err); got != apperr.KindAPI {
-		t.Fatalf("error kind = %q", got)
+	if len(items) != 1 || items[0].Name != "list" {
+		t.Fatalf("items = %#v", items)
 	}
 }

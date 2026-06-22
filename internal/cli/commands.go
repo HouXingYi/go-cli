@@ -1,40 +1,23 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"ziniao/internal/app"
+	"ziniao/internal/apperr"
+	"ziniao/internal/backend"
 	"ziniao/internal/catalog"
 	"ziniao/internal/config"
-	"ziniao/internal/httpclient"
 	"ziniao/internal/output"
 )
 
 func (rt *runtime) renderer() output.Renderer {
 	return output.New(config.DefaultOutput, rt.out, rt.errOut)
-}
-
-func (rt *runtime) buildService(cfg config.Config) (app.Service, error) {
-	if err := cfg.RequireToken(); err != nil {
-		return app.Service{}, err
-	}
-
-	api, err := httpclient.New(httpclient.Options{
-		BaseURL: config.DefaultBaseURL,
-		Token:   cfg.Token,
-		Timeout: config.DefaultTimeout,
-	})
-	if err != nil {
-		return app.Service{}, err
-	}
-
-	return app.NewService(api, cfg.Token), nil
 }
 
 func (rt *runtime) writeCommandError(err error) error {
@@ -55,7 +38,7 @@ func newAuthCommand(rt *runtime) *cobra.Command {
 				return rt.writeCommandError(err)
 			}
 
-			if err := cfg.RequireToken(); err != nil {
+			if err := cfg.RequireAuthKey(); err != nil {
 				return rt.writeCommandError(err)
 			}
 
@@ -68,8 +51,8 @@ func newAuthCommand(rt *runtime) *cobra.Command {
 }
 
 func newHTTPCommand(rt *runtime) *cobra.Command {
+	var provider string
 	var queryPairs []string
-	var headerPairs []string
 	var body string
 
 	httpCmd := &cobra.Command{
@@ -77,13 +60,15 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 		Short: "Send an authenticated HTTP request",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(provider) == "" {
+				return rt.writeCommandError(apperr.New(apperr.KindConfig, "provider is required", "use --provider ziniao or --provider erp."))
+			}
+
 			cfg, err := rt.loadConfig()
 			if err != nil {
 				return rt.writeCommandError(err)
 			}
-
-			service, err := rt.buildService(cfg)
-			if err != nil {
+			if err := cfg.RequireAuthKey(); err != nil {
 				return rt.writeCommandError(err)
 			}
 
@@ -91,38 +76,33 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 			if err != nil {
 				return rt.writeCommandError(err)
 			}
-			headers, err := parseHeaderPairs(headerPairs)
-			if err != nil {
-				return rt.writeCommandError(err)
-			}
 
 			var rawBody json.RawMessage
 			if strings.TrimSpace(body) != "" {
 				rawBody = json.RawMessage(strings.TrimSpace(body))
+				if !json.Valid(rawBody) {
+					return rt.writeCommandError(apperr.New(apperr.KindConfig, "body is invalid json", "pass --body with a valid JSON object or array."))
+				}
 			}
 
-			response, err := service.HTTPRequest(cmd.Context(), app.HTTPRequest{
-				Method:  args[0],
-				Path:    args[1],
-				Query:   query,
-				Headers: headers,
-				Body:    rawBody,
-			})
+			be := backend.New(cfg)
+			data, err := be.Proxy(cmd.Context(), provider, args[0], args[1], query, rawBody)
 			if err != nil {
 				return rt.writeCommandError(err)
 			}
-			return rt.renderer().Success(formatHTTPResponse(response), response)
+
+			return rt.renderer().Success(formatJSONRaw(data), data)
 		},
 	}
 
+	httpCmd.Flags().StringVar(&provider, "provider", "", "service provider identifier (required)")
 	httpCmd.Flags().StringArrayVar(&queryPairs, "query", nil, "append URL query parameter as key=value")
-	httpCmd.Flags().StringArrayVar(&headerPairs, "header", nil, "append request header as key=value")
 	httpCmd.Flags().StringVar(&body, "body", "", "JSON request body")
+	_ = httpCmd.MarkFlagRequired("provider")
 	return httpCmd
 }
 
 func newAPICommand(rt *runtime) *cobra.Command {
-	provider := catalog.NewMockProvider()
 	var full bool
 
 	apiCmd := &cobra.Command{
@@ -141,7 +121,13 @@ func newAPICommand(rt *runtime) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			message, data, err := runAPIQuery(cmd, provider, args, full)
+			cfg, err := rt.loadConfig()
+			if err != nil {
+				return rt.writeCommandError(err)
+			}
+
+			be := backend.New(cfg)
+			message, data, err := runAPIQuery(cmd.Context(), be, args, full)
 			if err != nil {
 				return rt.writeCommandError(err)
 			}
@@ -150,7 +136,7 @@ func newAPICommand(rt *runtime) *cobra.Command {
 	}
 
 	apiCmd.Flags().BoolVar(&full, "full", false, "return full API documents for a business module")
-	apiCmd.ValidArgsFunction = completeAPIArgs(provider)
+	apiCmd.ValidArgsFunction = completeAPIArgs(rt)
 	return apiCmd
 }
 
@@ -169,33 +155,66 @@ func newVersionCommand(rt *runtime) *cobra.Command {
 	}
 }
 
-func runAPIQuery(cmd *cobra.Command, provider catalog.Provider, args []string, full bool) (string, interface{}, error) {
+func runAPIQuery(ctx context.Context, be backend.Backend, args []string, full bool) (string, interface{}, error) {
+	module, business, api := "", "", ""
+	switch len(args) {
+	case 1:
+		module = args[0]
+	case 2:
+		module, business = args[0], args[1]
+	case 3:
+		module, business, api = args[0], args[1], args[2]
+	}
+
+	raw, err := be.Catalog(ctx, module, business, api, full)
+	if err != nil {
+		return "", nil, err
+	}
+
 	switch len(args) {
 	case 0:
-		items, err := provider.ListModules(cmd.Context())
-		return formatModules(items), items, err
+		items, err := catalog.ParseModules(raw)
+		return catalog.FormatModules(items), items, err
 	case 1:
-		items, err := provider.ListBusinesses(cmd.Context(), args[0])
-		return formatBusinesses(items), items, err
+		items, err := catalog.ParseBusinesses(raw)
+		return catalog.FormatBusinesses(items), items, err
 	case 2:
 		if full {
-			items, err := provider.ListFullAPIs(cmd.Context(), args[0], args[1])
+			items, err := catalog.ParseFullAPIs(raw)
 			return formatJSON(items), items, err
 		}
-		items, err := provider.ListAPIs(cmd.Context(), args[0], args[1])
-		return formatAPISummaries(items), items, err
+		items, err := catalog.ParseAPISummaries(raw)
+		return catalog.FormatAPISummaries(items), items, err
 	default:
-		doc, err := provider.GetAPI(cmd.Context(), args[0], args[1], args[2])
+		doc, err := catalog.ParseAPIDocument(raw)
 		return formatJSON(doc), doc, err
 	}
 }
 
-func completeAPIArgs(provider catalog.Provider) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+func completeAPIArgs(rt *runtime) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, err := rt.loadConfig()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		be := backend.New(cfg)
+		mock, _ := be.(*backend.MockBackend)
+
 		var candidates []string
 		switch len(args) {
 		case 0:
-			items, err := provider.ListModules(cmd.Context())
+			if mock != nil {
+				for _, name := range mock.ListModuleNames() {
+					candidates = appendCompletion(candidates, name, "", toComplete)
+				}
+				return candidates, cobra.ShellCompDirectiveNoFileComp
+			}
+			raw, err := be.Catalog(cmd.Context(), "", "", "", false)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			items, err := catalog.ParseModules(raw)
 			if err != nil {
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
@@ -203,7 +222,17 @@ func completeAPIArgs(provider catalog.Provider) func(*cobra.Command, []string, s
 				candidates = appendCompletion(candidates, item.Name, item.Title, toComplete)
 			}
 		case 1:
-			items, err := provider.ListBusinesses(cmd.Context(), args[0])
+			if mock != nil {
+				for _, name := range mock.ListBusinessNames(args[0]) {
+					candidates = appendCompletion(candidates, name, "", toComplete)
+				}
+				return candidates, cobra.ShellCompDirectiveNoFileComp
+			}
+			raw, err := be.Catalog(cmd.Context(), args[0], "", "", false)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			items, err := catalog.ParseBusinesses(raw)
 			if err != nil {
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
@@ -211,7 +240,17 @@ func completeAPIArgs(provider catalog.Provider) func(*cobra.Command, []string, s
 				candidates = appendCompletion(candidates, item.Name, item.Title, toComplete)
 			}
 		case 2:
-			items, err := provider.ListAPIs(cmd.Context(), args[0], args[1])
+			if mock != nil {
+				for _, name := range mock.ListAPINames(args[0], args[1]) {
+					candidates = appendCompletion(candidates, name, "", toComplete)
+				}
+				return candidates, cobra.ShellCompDirectiveNoFileComp
+			}
+			raw, err := be.Catalog(cmd.Context(), args[0], args[1], "", false)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			items, err := catalog.ParseAPISummaries(raw)
 			if err != nil {
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
@@ -245,18 +284,6 @@ func parseQueryPairs(pairs []string) (url.Values, error) {
 	return values, nil
 }
 
-func parseHeaderPairs(pairs []string) (http.Header, error) {
-	headers := http.Header{}
-	for _, pair := range pairs {
-		key, value, err := splitKeyValue(pair)
-		if err != nil {
-			return nil, err
-		}
-		headers.Add(key, value)
-	}
-	return headers, nil
-}
-
 func splitKeyValue(pair string) (string, string, error) {
 	key, value, ok := strings.Cut(pair, "=")
 	key = strings.TrimSpace(key)
@@ -264,30 +291,6 @@ func splitKeyValue(pair string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid key=value pair %q", pair)
 	}
 	return key, strings.TrimSpace(value), nil
-}
-
-func formatModules(items []catalog.ModuleSummary) string {
-	lines := make([]string, 0, len(items))
-	for _, item := range items {
-		lines = append(lines, fmt.Sprintf("%-10s %s", item.Name, item.Title))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func formatBusinesses(items []catalog.BusinessSummary) string {
-	lines := make([]string, 0, len(items))
-	for _, item := range items {
-		lines = append(lines, fmt.Sprintf("%-10s %s", item.Name, item.Title))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func formatAPISummaries(items []catalog.APISummary) string {
-	lines := make([]string, 0, len(items))
-	for _, item := range items {
-		lines = append(lines, fmt.Sprintf("%-10s %-6s %-20s %s", item.Name, item.Method, item.URL, item.Title))
-	}
-	return strings.Join(lines, "\n")
 }
 
 func formatJSON(value interface{}) string {
@@ -298,15 +301,15 @@ func formatJSON(value interface{}) string {
 	return string(payload)
 }
 
-func formatHTTPResponse(response httpclient.Response) string {
-	if len(response.Body) == 0 {
-		return response.Status
+func formatJSONRaw(value json.RawMessage) string {
+	if len(value) == 0 {
+		return ""
 	}
-	if json.Valid(response.Body) {
-		var value interface{}
-		if err := json.Unmarshal(response.Body, &value); err == nil {
-			return formatJSON(value)
+	if json.Valid(value) {
+		var parsed interface{}
+		if err := json.Unmarshal(value, &parsed); err == nil {
+			return formatJSON(parsed)
 		}
 	}
-	return string(response.Body)
+	return string(value)
 }

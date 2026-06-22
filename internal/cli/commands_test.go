@@ -2,15 +2,13 @@ package cli
 
 import (
 	"bytes"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"ziniao/internal/config"
 )
 
-func TestAuthReportsMissingToken(t *testing.T) {
+func TestAuthReportsMissingAuthKey(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd := NewRootCommand(&out, &errOut)
@@ -22,11 +20,11 @@ func TestAuthReportsMissingToken(t *testing.T) {
 	}
 
 	got := errOut.String()
-	if !strings.Contains(got, "token is required") {
-		t.Fatalf("stderr missing token error: %s", got)
+	if !strings.Contains(got, "auth key is required") {
+		t.Fatalf("stderr missing auth key error: %s", got)
 	}
-	if !strings.Contains(got, "set ZINIAO_TOKEN") {
-		t.Fatalf("stderr missing token hint: %s", got)
+	if !strings.Contains(got, "set CLI_AUTH_KEY") {
+		t.Fatalf("stderr missing auth key hint: %s", got)
 	}
 }
 
@@ -74,46 +72,36 @@ func TestAPIRejectsFullWithAPIName(t *testing.T) {
 	}
 }
 
-func TestHTTPCommandSendsRequest(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s", r.Method)
-		}
-		if r.URL.Path != "/api/user/create" {
-			t.Fatalf("path = %s", r.URL.Path)
-		}
-		if r.URL.Query().Get("page") != "1" {
-			t.Fatalf("query page = %s", r.URL.Query().Get("page"))
-		}
-		if r.Header.Get("X-Test") != "yes" {
-			t.Fatalf("X-Test = %s", r.Header.Get("X-Test"))
-		}
-		if r.Header.Get("Authorization") != "Bearer test-token" {
-			t.Fatalf("Authorization = %s", r.Header.Get("Authorization"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer server.Close()
-
-	t.Setenv("ZINIAO_TOKEN", "test-token")
-
-	originalBaseURL := config.DefaultBaseURL
-	config.DefaultBaseURL = server.URL
-	t.Cleanup(func() {
-		config.DefaultBaseURL = originalBaseURL
-	})
+func TestHTTPCommandUsesMockBackend(t *testing.T) {
+	t.Setenv(config.EnvAuthKey, "test-key")
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd := NewRootCommand(&out, &errOut)
-	cmd.SetArgs([]string{"http", "POST", "/api/user/create", "--query", "page=1", "--header", "X-Test=yes", "--body", `{"name":"test"}`})
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", "page=1"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
 	}
-	if got := out.String(); !strings.Contains(got, `"ok": true`) {
+	if got := out.String(); !strings.Contains(got, `"api": "list"`) {
 		t.Fatalf("http output = %s", got)
+	}
+}
+
+func TestHTTPCommandRequiresProvider(t *testing.T) {
+	t.Setenv(config.EnvAuthKey, "test-key")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "provider") && !strings.Contains(errOut.String(), "provider is required") {
+		t.Fatalf("error = %v, stderr = %s", err, errOut.String())
 	}
 }
 

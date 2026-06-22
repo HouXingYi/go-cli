@@ -43,16 +43,16 @@ func TestErrorTextWithHint(t *testing.T) {
 	var errOut bytes.Buffer
 	renderer := New(config.OutputText, &bytes.Buffer{}, &errOut)
 
-	err := apperr.New(apperr.KindConfig, "token is required", "set ZINIAO_TOKEN.")
+	err := apperr.New(apperr.KindConfig, "auth key is required", "set CLI_AUTH_KEY.")
 	if writeErr := renderer.Error(err); writeErr != nil {
 		t.Fatalf("Error() error = %v", writeErr)
 	}
 
 	got := errOut.String()
-	if !strings.Contains(got, "Error: token is required") {
+	if !strings.Contains(got, "Error: auth key is required") {
 		t.Fatalf("error output missing message: %s", got)
 	}
-	if !strings.Contains(got, "Hint: set ZINIAO_TOKEN.") {
+	if !strings.Contains(got, "Hint: set CLI_AUTH_KEY.") {
 		t.Fatalf("error output missing hint: %s", got)
 	}
 }

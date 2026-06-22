@@ -7,21 +7,34 @@ import (
 )
 
 func TestLoadReadsEnvironment(t *testing.T) {
-	t.Setenv("ZINIAO_TOKEN", "test-token")
+	t.Setenv(EnvAuthKey, "test-key")
+	t.Setenv(EnvProxyBaseURL, "https://api.example.com/vendor-proxy")
 
 	cfg, err := Load(viper.New())
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Token != "test-token" {
-		t.Fatalf("Token = %q", cfg.Token)
+	if cfg.AuthKey != "test-key" {
+		t.Fatalf("AuthKey = %q", cfg.AuthKey)
+	}
+	if cfg.ProxyBaseURL != "https://api.example.com/vendor-proxy" {
+		t.Fatalf("ProxyBaseURL = %q", cfg.ProxyBaseURL)
 	}
 }
 
-func TestRequireToken(t *testing.T) {
-	err := Config{}.RequireToken()
+func TestUseRemoteBackend(t *testing.T) {
+	if (Config{}).UseRemoteBackend() {
+		t.Fatal("empty config should not use remote backend")
+	}
+	if !(Config{ProxyBaseURL: "https://api.example.com"}).UseRemoteBackend() {
+		t.Fatal("config with base URL should use remote backend")
+	}
+}
+
+func TestRequireAuthKey(t *testing.T) {
+	err := Config{}.RequireAuthKey()
 	if err == nil {
-		t.Fatal("RequireToken() error = nil, want error")
+		t.Fatal("RequireAuthKey() error = nil, want error")
 	}
 }

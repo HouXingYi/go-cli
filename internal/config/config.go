@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"time"
 
@@ -16,14 +17,16 @@ const (
 	OutputText    = "text"
 	OutputJSON    = "json"
 	DefaultOutput = OutputText
-)
 
-var DefaultBaseURL = "https://gateway.ziniao.com"
+	EnvProxyBaseURL = "VENDOR_PROXY_BASE"
+	EnvAuthKey      = "CLI_AUTH_KEY"
+)
 
 const DefaultTimeout = 10 * time.Second
 
 type Config struct {
-	Token string
+	ProxyBaseURL string
+	AuthKey      string
 }
 
 func Configure(v *viper.Viper) error {
@@ -39,13 +42,18 @@ func Load(v *viper.Viper) (Config, error) {
 	}
 
 	return Config{
-		Token: strings.TrimSpace(v.GetString("token")),
+		ProxyBaseURL: strings.TrimSpace(os.Getenv(EnvProxyBaseURL)),
+		AuthKey:      strings.TrimSpace(os.Getenv(EnvAuthKey)),
 	}, nil
 }
 
-func (c Config) RequireToken() error {
-	if strings.TrimSpace(c.Token) == "" {
-		return apperr.New(apperr.KindConfig, "token is required", "set ZINIAO_TOKEN.")
+func (c Config) UseRemoteBackend() bool {
+	return strings.TrimSpace(c.ProxyBaseURL) != ""
+}
+
+func (c Config) RequireAuthKey() error {
+	if strings.TrimSpace(c.AuthKey) == "" {
+		return apperr.New(apperr.KindConfig, "auth key is required", "set CLI_AUTH_KEY.")
 	}
 	return nil
 }

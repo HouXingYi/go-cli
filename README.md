@@ -1,6 +1,6 @@
 # ziniao
 
-`ziniao` 是一个使用 Go 编写的、基于 token 调用 HTTP 接口的命令行工具。CLI 名称为 `zn-cli`（当前版本 `0.1.0`），构建产物通常命名为 `ziniao` 或 `ziniao.exe`。项目将命令解析、运行时配置、应用用例、HTTP 通信和输出格式化分层处理，方便后续新增命令和接口能力。
+`ziniao` 是一个使用 Go 编写的命令行工具，通过 vendor-proxy 调用后端业务接口并查询 API 目录。CLI 名称为 `zn-cli`（当前版本 `0.1.0`），构建产物通常命名为 `ziniao` 或 `ziniao.exe`。
 
 完整命令说明见 [docs/cli-api-docs.md](docs/cli-api-docs.md)。
 
@@ -11,7 +11,7 @@ zn-cli [command] [flags]
 
 Commands:
   auth      校验本地鉴权配置
-  http      发送带 Bearer Token 的 HTTP 请求
+  http      通过 vendor-proxy 发送业务请求
   api       查看 HTTP API 目录
   version   查看 CLI 版本
 ```
@@ -54,21 +54,7 @@ Linux / macOS / Git Bash：
 bash scripts/build-all.sh
 ```
 
-构建产物会输出到 `dist/`：
-
-```text
-dist/ziniao-linux-amd64
-dist/ziniao-linux-arm64
-dist/ziniao-darwin-amd64
-dist/ziniao-darwin-arm64
-dist/ziniao-windows-amd64.exe
-```
-
-Linux 环境中使用前需要赋予执行权限：
-
-```bash
-chmod +x dist/ziniao-linux-amd64
-```
+构建产物会输出到 `dist/`。
 
 ## 使用方式
 
@@ -81,19 +67,21 @@ ziniao --help
 校验本地鉴权配置（不会向后端发请求，也不会写入磁盘）：
 
 ```bash
-export ZINIAO_TOKEN=your-token
+export CLI_AUTH_KEY=your-key
 ziniao auth
 ```
 
-发送 HTTP 请求（请求发往内置 API 基础地址 `https://gateway.ziniao.com`）：
+发送 HTTP 请求（`--provider` 必填）：
 
 ```bash
-export ZINIAO_TOKEN=your-token
-ziniao http GET /api/user/list --query page=1 --query pageSize=20
-ziniao http POST /api/user/create --body '{"name":"test"}'
+export CLI_AUTH_KEY=your-key
+export VENDOR_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
+
+ziniao http GET /api/user/list --provider ziniao --query page=1 --query pageSize=20
+ziniao http POST /api/user/create --provider ziniao --body '{"name":"test"}'
 ```
 
-查看 API 目录（当前使用内置 Mock 数据，不依赖 token）：
+查看 API 目录（未设置 `VENDOR_PROXY_BASE` 时使用内置 MockBackend）：
 
 ```bash
 ziniao api
@@ -109,26 +97,26 @@ ziniao version
 
 ## 配置
 
-当前唯一用户可配置项为环境变量 `ZINIAO_TOKEN`，通过 Viper 读取（`internal/config` 保留 Viper 基础设施，便于后续扩展更多配置项）。
-
 | 环境变量 | 说明 |
 | --- | --- |
-| `ZINIAO_TOKEN` | 访问 token，HTTP 请求以 `Authorization: Bearer <token>` 发送 |
+| `CLI_AUTH_KEY` | 鉴权密钥，HTTP 请求以 `Authorization: Bearer <key>` 发送 |
+| `VENDOR_PROXY_BASE` | vendor-proxy 基础 URL；设置后对接真实后端，未设置时使用 MockBackend |
 
-以下值当前为内置常量（定义于 `internal/config/config.go`），不可通过命令行或环境变量修改：
+本地开发时只需 `CLI_AUTH_KEY` 即可使用 Mock 模式；沙箱环境由 `a1-browser-server` 自动注入上述变量。
+
+内置常量（`internal/config/config.go`）：
 
 | 常量 | 当前值 | 说明 |
 | --- | --- | --- |
-| `DefaultBaseURL` | `https://gateway.ziniao.com` | HTTP API 基础地址 |
 | `DefaultTimeout` | `10s` | HTTP 请求超时 |
 
 ## 输出格式
 
 当前 CLI 固定使用 text 输出：成功时向 stdout 输出人类可读消息；失败时向 stderr 输出错误与提示。
 
-## Token 安全
+## 密钥安全
 
-token 仅通过环境变量 `ZINIAO_TOKEN` 提供，不提供 `--token` 命令行参数。错误信息和普通输出不会回显 token。
+`CLI_AUTH_KEY` 仅通过环境变量提供，不提供 `--token` 或命令行密钥参数。错误信息和普通输出不会回显密钥。
 
 ## 开发
 
@@ -140,20 +128,6 @@ go test ./...
 
 构建：
 
-Windows：
-
-```bat
-scripts\build-all.bat
-```
-
-也可以使用 PowerShell：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build-all.ps1
-```
-
-Linux / macOS / Git Bash：
-
 ```bash
 bash scripts/build-all.sh
 ```
@@ -162,11 +136,11 @@ bash scripts/build-all.sh
 
 | 错误信息 | 原因 | 处理建议 |
 | --- | --- | --- |
-| `token is required` | 未设置 `ZINIAO_TOKEN` | 执行 `export ZINIAO_TOKEN=...` |
-| `path is invalid` | `http` 命令 path 不以 `/` 开头 | 使用 `/api/...` 形式 |
+| `auth key is required` | 未设置 `CLI_AUTH_KEY` | 执行 `export CLI_AUTH_KEY=...` |
+| `provider is required` | `http` 未传 `--provider` | 添加 `--provider ziniao` 或 `--provider erp` |
 | `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
-| `invalid key=value pair` | `--query` 或 `--header` 格式错误 | 使用 `key=value` 格式 |
+| `invalid key=value pair` | `--query` 格式错误 | 使用 `key=value` 格式 |
 | `request timed out` | 请求超时 | 检查网络连接 |
 | `module/business/api "..." not found` | 目录中无对应项 | 运行 `ziniao api` 查看可用目录 |
 
-HTTP 401/403 时错误 kind 为 `auth`，其他非 2xx 为 `api`。更多细节见 [docs/cli-api-docs.md](docs/cli-api-docs.md)。
+更多细节见 [docs/cli-api-docs.md](docs/cli-api-docs.md)。
