@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"ziniao/internal/apperr"
@@ -106,19 +105,6 @@ func retHint(ret int) string {
 
 func trimPath(path string) string {
 	return strings.Trim(strings.TrimSpace(path), "/")
-}
-
-func valuesToMap(values url.Values) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, items := range values {
-		if len(items) > 0 {
-			out[key] = items[len(items)-1]
-		}
-	}
-	return out
 }
 
 func rawMessageToMap(raw json.RawMessage) map[string]interface{} {

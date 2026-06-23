@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"ziniao/internal/apperr"
@@ -123,7 +122,7 @@ func NewMockBackend() *MockBackend {
 	}
 }
 
-func (b *MockBackend) Proxy(ctx context.Context, provider string, method, path string, query url.Values, body json.RawMessage) (json.RawMessage, error) {
+func (b *MockBackend) Proxy(ctx context.Context, provider string, method, path string, query, body json.RawMessage) (json.RawMessage, error) {
 	provider = normalize(provider)
 	method = strings.ToUpper(strings.TrimSpace(method))
 	trimmed := trimPath(path)
@@ -272,14 +271,14 @@ func pathMatches(apiURL, requestPath string) bool {
 	return false
 }
 
-func mockProxyResponse(doc mockAPI, query url.Values, body json.RawMessage) map[string]interface{} {
+func mockProxyResponse(doc mockAPI, query, body json.RawMessage) map[string]interface{} {
 	result := map[string]interface{}{
 		"mock":   true,
 		"api":    doc.Name,
 		"method": doc.Method,
 		"url":    doc.URL,
 	}
-	if queryMap := valuesToMap(query); len(queryMap) > 0 {
+	if queryMap := rawMessageToMap(query); len(queryMap) > 0 {
 		result["query"] = queryMap
 	}
 	if bodyMap := rawMessageToMap(body); len(bodyMap) > 0 {

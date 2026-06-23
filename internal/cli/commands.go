@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -52,7 +51,7 @@ func newAuthCommand(rt *runtime) *cobra.Command {
 
 func newHTTPCommand(rt *runtime) *cobra.Command {
 	var provider string
-	var queryPairs []string
+	var query string
 	var body string
 
 	httpCmd := &cobra.Command{
@@ -72,21 +71,18 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 				return rt.writeCommandError(err)
 			}
 
-			query, err := parseQueryPairs(queryPairs)
+			rawQuery, err := parseOptionalJSONObject(query, "query")
 			if err != nil {
 				return rt.writeCommandError(err)
 			}
 
-			var rawBody json.RawMessage
-			if strings.TrimSpace(body) != "" {
-				rawBody = json.RawMessage(strings.TrimSpace(body))
-				if !json.Valid(rawBody) {
-					return rt.writeCommandError(apperr.New(apperr.KindConfig, "body is invalid json", "pass --body with a valid JSON object or array."))
-				}
+			rawBody, err := parseOptionalJSONValue(body, "body")
+			if err != nil {
+				return rt.writeCommandError(err)
 			}
 
 			be := backend.New(cfg)
-			data, err := be.Proxy(cmd.Context(), provider, args[0], args[1], query, rawBody)
+			data, err := be.Proxy(cmd.Context(), provider, args[0], args[1], rawQuery, rawBody)
 			if err != nil {
 				return rt.writeCommandError(err)
 			}
@@ -96,7 +92,7 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 	}
 
 	httpCmd.Flags().StringVar(&provider, "provider", "", "service provider identifier (required)")
-	httpCmd.Flags().StringArrayVar(&queryPairs, "query", nil, "append URL query parameter as key=value")
+	httpCmd.Flags().StringVar(&query, "query", "", "JSON query parameters object")
 	httpCmd.Flags().StringVar(&body, "body", "", "JSON request body")
 	_ = httpCmd.MarkFlagRequired("provider")
 	return httpCmd
@@ -272,25 +268,32 @@ func appendCompletion(candidates []string, name, title, prefix string) []string 
 	return append(candidates, fmt.Sprintf("%s\t%s", name, title))
 }
 
-func parseQueryPairs(pairs []string) (url.Values, error) {
-	values := url.Values{}
-	for _, pair := range pairs {
-		key, value, err := splitKeyValue(pair)
-		if err != nil {
-			return nil, err
-		}
-		values.Add(key, value)
+func parseOptionalJSONObject(raw, flag string) (json.RawMessage, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
 	}
-	return values, nil
+	msg := json.RawMessage(trimmed)
+	if !json.Valid(msg) {
+		return nil, apperr.New(apperr.KindConfig, flag+" is invalid json", "pass --"+flag+" with a valid JSON object.")
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal(msg, &obj); err != nil || obj == nil {
+		return nil, apperr.New(apperr.KindConfig, flag+" is invalid json", "pass --"+flag+" with a valid JSON object.")
+	}
+	return msg, nil
 }
 
-func splitKeyValue(pair string) (string, string, error) {
-	key, value, ok := strings.Cut(pair, "=")
-	key = strings.TrimSpace(key)
-	if !ok || key == "" {
-		return "", "", fmt.Errorf("invalid key=value pair %q", pair)
+func parseOptionalJSONValue(raw, flag string) (json.RawMessage, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
 	}
-	return key, strings.TrimSpace(value), nil
+	msg := json.RawMessage(trimmed)
+	if !json.Valid(msg) {
+		return nil, apperr.New(apperr.KindConfig, flag+" is invalid json", "pass --"+flag+" with a valid JSON object or array.")
+	}
+	return msg, nil
 }
 
 func formatJSON(value interface{}) string {

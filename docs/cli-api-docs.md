@@ -105,7 +105,7 @@ zn-cli http <method> <path> --provider <provider> [flags]
 | 参数 | 说明 |
 | --- | --- |
 | `--provider` | 服务商标识，**必填**，例如 `ziniao`、`erp` |
-| `--query <key=value>` | 追加 URL 查询参数，可重复传入 |
+| `--query <json>` | URL 查询参数，须为合法 JSON 对象 |
 | `--body <json>` | 请求体，须为合法 JSON，适用于 `POST`、`PUT` 等 |
 
 **请求行为：**
@@ -134,7 +134,7 @@ zn-cli http <method> <path> --provider <provider> [flags]
 export CLI_AUTH_KEY=your-key
 export VENDOR_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
 
-zn-cli http GET /api/user/list --provider ziniao --query page=1 --query pageSize=20
+zn-cli http GET /api/user/list --provider ziniao --query '{"page":1,"pageSize":20}'
 zn-cli http POST /api/user/create --provider ziniao --body '{"name":"test"}'
 ```
 
@@ -282,6 +282,6 @@ zn-cli 0.1.0
 | `auth key is required` | 未设置 `CLI_AUTH_KEY` | 执行 `export CLI_AUTH_KEY=...` |
 | `provider is required` | `http` 未传 `--provider` | 添加 `--provider ziniao` 或 `--provider erp` |
 | `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
-| `invalid key=value pair` | `--query` 格式错误 | 使用 `key=value` 格式 |
+| `query is invalid json` | `--query` 不是合法 JSON 对象 | 传入合法 JSON 对象，例如 `'{"page":1}'` |
 | `request timed out` | 请求超时 | 检查网络连接 |
 | `module/business/api "..." not found` | 目录中无对应项 | 运行 `zn-cli api` 查看可用目录 |

@@ -78,13 +78,47 @@ func TestHTTPCommandUsesMockBackend(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd := NewRootCommand(&out, &errOut)
-	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", "page=1"})
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", `{"page":1}`})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
 	}
 	if got := out.String(); !strings.Contains(got, `"api": "list"`) {
 		t.Fatalf("http output = %s", got)
+	}
+}
+
+func TestHTTPCommandRejectsInvalidQueryJSON(t *testing.T) {
+	t.Setenv(config.EnvAuthKey, "test-key")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", "not-json"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if !strings.Contains(errOut.String(), "query is invalid json") {
+		t.Fatalf("stderr = %s", errOut.String())
+	}
+}
+
+func TestHTTPCommandRejectsQueryArray(t *testing.T) {
+	t.Setenv(config.EnvAuthKey, "test-key")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", "[]"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if !strings.Contains(errOut.String(), "query is invalid json") {
+		t.Fatalf("stderr = %s", errOut.String())
 	}
 }
 

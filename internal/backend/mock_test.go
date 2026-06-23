@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"ziniao/internal/apperr"
@@ -34,7 +33,7 @@ func TestMockBackendCatalogModules(t *testing.T) {
 
 func TestMockBackendProxyUserList(t *testing.T) {
 	be := NewMockBackend()
-	raw, err := be.Proxy(context.Background(), "ziniao", "GET", "/api/user/list", url.Values{"page": []string{"1"}}, nil)
+	raw, err := be.Proxy(context.Background(), "ziniao", "GET", "/api/user/list", json.RawMessage(`{"page":1}`), nil)
 	if err != nil {
 		t.Fatalf("Proxy() error = %v", err)
 	}
@@ -80,7 +79,7 @@ func TestHTTPBackendProxy(t *testing.T) {
 		AuthKey:      "test-key",
 	})
 
-	raw, err := be.Proxy(context.Background(), "ziniao", "GET", "/user/list", url.Values{"page": []string{"1"}}, nil)
+	raw, err := be.Proxy(context.Background(), "ziniao", "GET", "/user/list", json.RawMessage(`{"page":1}`), nil)
 	if err != nil {
 		t.Fatalf("Proxy() error = %v", err)
 	}

@@ -31,11 +31,11 @@ func NewHTTPBackend(cfg config.Config) *HTTPBackend {
 	}
 }
 
-func (b *HTTPBackend) Proxy(ctx context.Context, provider string, method, path string, query url.Values, body json.RawMessage) (json.RawMessage, error) {
+func (b *HTTPBackend) Proxy(ctx context.Context, provider string, method, path string, query, body json.RawMessage) (json.RawMessage, error) {
 	proxyBody := map[string]interface{}{
 		"method": strings.ToUpper(strings.TrimSpace(method)),
 	}
-	if queryMap := valuesToMap(query); len(queryMap) > 0 {
+	if queryMap := rawMessageToMap(query); len(queryMap) > 0 {
 		proxyBody["query"] = queryMap
 	}
 	if bodyMap := rawMessageToMap(body); len(bodyMap) > 0 {
