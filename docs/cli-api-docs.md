@@ -12,6 +12,7 @@
 zn-cli [command] [flags]
 
 Commands:
+  agent     Agent-oriented CLI guidance
   auth      Configure CLI authentication
   config    Manage CLI configuration
   http      Send an authenticated HTTP request via vendor-proxy
@@ -56,6 +57,22 @@ Hint: set CLI_AUTH_KEY.
 ---
 
 ## 核心命令
+
+### `zn-cli agent guide`
+
+**说明：** 向 stdout 输出内置 Agent 使用指南（`skills/zn-cli/SKILL.md`）。无需 `CLI_AUTH_KEY`，不访问网络。输出为原始 Markdown，不经 `Renderer` 包装，供 Agent 自举加载上下文。
+
+**命令：**
+
+```bash
+zn-cli agent guide
+```
+
+**参数：** 无。
+
+**输出：** 完整 SKILL.md 正文（含 YAML frontmatter）。
+
+---
 
 ### `zn-cli auth`
 
@@ -328,13 +345,15 @@ zn-cli 0.1.0
 
 ## LLM 调用说明
 
-沙箱内 LLM 推荐按以下顺序调用，避免在上下文中重复记忆 module：
+沙箱内 LLM 推荐按以下顺序调用：
 
-1. `zn-cli api` — 列出可用大模块
-2. `zn-cli config module set <module>` — 持久化当前任务的大模块
-3. `zn-cli http <method> <path> [--query ...] [--body ...]` — 发送业务请求（无需每次传 module）
+1. `zn-cli agent guide` — 加载 Agent 使用规范（可选，若已在上下文中可跳过）
+2. `zn-cli auth` — 确认 `CLI_AUTH_KEY` 已配置
+3. `zn-cli api` — 列出可用大模块
+4. `zn-cli config module set <module>` — 持久化当前任务的大模块
+5. `zn-cli http <method> <path> [--query ...] [--body ...]` — 发送业务请求（无需每次传 module）
 
-临时切换大模块时使用 `http --module`。`module` 与后端对接文档 URL 路径中的 `{provider}` 同义。
+临时切换大模块时使用 `http --module`。`module` 与后端对接文档 URL 路径中的 `{provider}` 同义。业务 API 参数以 `zn-cli api <module> <business> <api>` 为准，勿在上下文中硬编码 API 列表。
 
 ---
 

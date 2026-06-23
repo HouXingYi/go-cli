@@ -280,3 +280,44 @@ func TestVersionCommand(t *testing.T) {
 		t.Fatalf("version output = %s", got)
 	}
 }
+
+func TestAgentGuidePrintsContent(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"agent", "guide"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+
+	got := out.String()
+	if !strings.HasPrefix(got, "---\n") {
+		t.Fatalf("agent guide output missing frontmatter: %.80q", got)
+	}
+	if !strings.Contains(got, "name: zn-cli") {
+		t.Fatalf("agent guide output missing name: zn-cli: %s", got)
+	}
+	if !strings.Contains(got, "## 推荐工作流") {
+		t.Fatalf("agent guide output missing workflow section: %s", got)
+	}
+}
+
+func TestAgentGuideNoAuthRequired(t *testing.T) {
+	t.Setenv(config.EnvAuthKey, "")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"agent", "guide"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("stderr = %s, want empty", errOut.String())
+	}
+	if strings.Contains(out.String(), "Authentication configured") {
+		t.Fatalf("agent guide should not use Renderer wrapper: %s", out.String())
+	}
+}
