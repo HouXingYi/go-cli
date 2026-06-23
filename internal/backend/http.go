@@ -31,7 +31,7 @@ func NewHTTPBackend(cfg config.Config) *HTTPBackend {
 	}
 }
 
-func (b *HTTPBackend) Proxy(ctx context.Context, provider string, method, path string, query, body json.RawMessage) (json.RawMessage, error) {
+func (b *HTTPBackend) Proxy(ctx context.Context, module string, method, path string, query, body json.RawMessage) (json.RawMessage, error) {
 	proxyBody := map[string]interface{}{
 		"method": strings.ToUpper(strings.TrimSpace(method)),
 	}
@@ -42,7 +42,7 @@ func (b *HTTPBackend) Proxy(ctx context.Context, provider string, method, path s
 		proxyBody["body"] = bodyMap
 	}
 
-	requestPath := "/cli/" + strings.Trim(strings.TrimSpace(provider), "/") + "/" + trimPath(path)
+	requestPath := "/cli/" + strings.Trim(strings.TrimSpace(module), "/") + "/" + trimPath(path)
 	return b.do(ctx, http.MethodPost, requestPath, nil, proxyBody)
 }
 

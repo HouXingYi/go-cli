@@ -13,6 +13,7 @@ zn-cli [command] [flags]
 
 Commands:
   auth      Configure CLI authentication
+  config    Manage CLI configuration
   http      Send an authenticated HTTP request via vendor-proxy
   api       Inspect backend HTTP API catalog
   version   Print CLI version
@@ -28,8 +29,12 @@ Commands:
 | --- | --- |
 | `CLI_AUTH_KEY` | 鉴权密钥，请求以 `Authorization: Bearer <key>` 发送 |
 | `VENDOR_PROXY_BASE` | vendor-proxy 基础 URL，例如 `https://api.example.com/api/v1/claw/vendor-proxy` |
+| `ZINIAO_MODULE` | 默认一级大模块（module）；优先级低于 `http --module`，高于持久化配置 |
+| `ZINIAO_CONFIG_DIR` | CLI 状态目录；未设置时使用 `UserConfigDir()/zn-cli/` |
 
 设置 `VENDOR_PROXY_BASE` 后，CLI 自动切换为 HTTPBackend 对接真实后端；未设置时 `http` 与 `api` 均走 MockBackend。
+
+**术语说明：** CLI 统一使用 **module** 表示一级大模块（与 `api [module]` 一致）。后端对接文档中的 URL 路径段 `{provider}` 与 module 指同一值，见 [cli-integration.md](cli-integration.md)。
 
 以下值为内置常量（`internal/config/config.go`），当前不可通过 CLI 或环境变量修改：
 
@@ -83,14 +88,47 @@ zn-cli auth
 
 ---
 
+### `zn-cli config module`
+
+**说明：** 管理默认一级大模块（module）。`http` 在未传 `--module` 时会使用已配置的默认值，避免 LLM 在每次请求中重复传递 module。
+
+**子命令：**
+
+```bash
+zn-cli config module set <module>   # 持久化默认 module
+zn-cli config module get            # 查看当前默认 module
+zn-cli config module clear          # 清除持久化的默认 module
+```
+
+**持久化位置：** `$ZINIAO_CONFIG_DIR/state.yaml`（或 `UserConfigDir()/zn-cli/state.yaml`），内容示例：
+
+```yaml
+module: ziniao
+```
+
+**示例：**
+
+```bash
+zn-cli api
+zn-cli config module set ziniao
+zn-cli config module get
+# ziniao
+
+zn-cli config module clear
+```
+
+**说明：** `config module get` 在设置了 `ZINIAO_MODULE` 时优先显示环境变量中的值（`source: environment`）；否则显示持久化配置（`source: config`）。
+
+---
+
 ### `zn-cli http`
 
-**说明：** 通过 vendor-proxy 代理转发业务请求。CLI 将用户指定的 HTTP 方法、路径、查询参数和请求体包装为代理请求，发往 `POST {VENDOR_PROXY_BASE}/cli/{provider}/{path}`。
+**说明：** 通过 vendor-proxy 代理转发业务请求。CLI 将用户指定的 HTTP 方法、路径、查询参数和请求体包装为代理请求，发往 `POST {VENDOR_PROXY_BASE}/cli/{module}/{path}`（后端文档中该路径段有时写作 `{provider}`，与 module 同义）。
 
 **命令：**
 
 ```bash
-zn-cli http <method> <path> --provider <provider> [flags]
+zn-cli http <method> <path> [flags]
 ```
 
 **参数：**
@@ -104,38 +142,51 @@ zn-cli http <method> <path> --provider <provider> [flags]
 
 | 参数 | 说明 |
 | --- | --- |
-| `--provider` | 服务商标识，**必填**，例如 `ziniao`、`erp` |
+| `--module` | 一级大模块标识，**可选**；传入时临时覆盖默认 module，例如 `ziniao`、`erp` |
 | `--query <json>` | URL 查询参数，须为合法 JSON 对象 |
 | `--body <json>` | 请求体，须为合法 JSON，适用于 `POST`、`PUT` 等 |
+
+**Module 解析优先级（高 → 低）：**
+
+1. `--module` flag
+2. `ZINIAO_MODULE` 环境变量
+3. `config module set` 持久化的值（`state.yaml`）
+
+均未设置时报错，hint 引导执行 `zn-cli config module set <name>` 或 `zn-cli api` 查看可选 module。
 
 **请求行为：**
 
 - 实际 HTTP 方法固定为 `POST`（代理协议）
-- 目标 URL：`{VENDOR_PROXY_BASE}/cli/{provider}/{trimmedPath}`
+- 目标 URL：`{VENDOR_PROXY_BASE}/cli/{module}/{trimmedPath}`
 - 代理请求体：`{"method":"GET","query":{...},"body":{...}}`
 - 自动设置 `Authorization: Bearer <CLI_AUTH_KEY>`
 - 成功时输出响应信封中的 `data` 字段（JSON 美化）
 
-**前置条件：** 需要设置 `CLI_AUTH_KEY`。
+**前置条件：** 需要设置 `CLI_AUTH_KEY`；需要已配置默认 module 或传入 `--module`。
 
 **错误处理：**
 
 | 场景 | 错误 kind | 典型 hint |
 | --- | --- | --- |
 | 未设置 `CLI_AUTH_KEY` | `config` | set CLI_AUTH_KEY. |
-| 未传 `--provider` | `config` | use --provider ziniao or --provider erp. |
+| 未配置 module | `config` | run zn-cli config module set \<name\> or pass --module. |
 | HTTP 401 | `auth` | check whether CLI_AUTH_KEY is valid. |
 | HTTP 200 且 `ret != 0` | `api` | 按 ret 码提示（如 30002 用户未配置鉴权凭证） |
 | 超时 | `network` | check network connectivity. |
 
-**示例：**
+**推荐工作流（LLM 沙箱）：**
 
 ```bash
 export CLI_AUTH_KEY=your-key
 export VENDOR_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
 
-zn-cli http GET /api/user/list --provider ziniao --query '{"page":1,"pageSize":20}'
-zn-cli http POST /api/user/create --provider ziniao --body '{"name":"test"}'
+zn-cli api
+zn-cli config module set ziniao
+zn-cli http GET /api/user/list --query '{"page":1,"pageSize":20}'
+zn-cli http POST /api/user/create --body '{"name":"test"}'
+
+# 临时切换大模块
+zn-cli http GET /api/order/list --module erp
 ```
 
 本地无后端时（未设置 `VENDOR_PROXY_BASE`），MockBackend 根据 catalog 中的 path/method 返回模拟 `data`。
@@ -275,12 +326,24 @@ zn-cli 0.1.0
 
 ---
 
+## LLM 调用说明
+
+沙箱内 LLM 推荐按以下顺序调用，避免在上下文中重复记忆 module：
+
+1. `zn-cli api` — 列出可用大模块
+2. `zn-cli config module set <module>` — 持久化当前任务的大模块
+3. `zn-cli http <method> <path> [--query ...] [--body ...]` — 发送业务请求（无需每次传 module）
+
+临时切换大模块时使用 `http --module`。`module` 与后端对接文档 URL 路径中的 `{provider}` 同义。
+
+---
+
 ## 常见问题
 
 | 错误信息 | 原因 | 处理建议 |
 | --- | --- | --- |
 | `auth key is required` | 未设置 `CLI_AUTH_KEY` | 执行 `export CLI_AUTH_KEY=...` |
-| `provider is required` | `http` 未传 `--provider` | 添加 `--provider ziniao` 或 `--provider erp` |
+| `module is required` | `http` 未配置默认 module 且未传 `--module` | 执行 `zn-cli config module set ziniao` 或添加 `--module ziniao` |
 | `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
 | `query is invalid json` | `--query` 不是合法 JSON 对象 | 传入合法 JSON 对象，例如 `'{"page":1}'` |
 | `request timed out` | 请求超时 | 检查网络连接 |

@@ -74,11 +74,77 @@ func TestAPIRejectsFullWithAPIName(t *testing.T) {
 
 func TestHTTPCommandUsesMockBackend(t *testing.T) {
 	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvConfigDir, t.TempDir())
+	t.Setenv(config.EnvModule, "")
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd := NewRootCommand(&out, &errOut)
-	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", `{"page":1}`})
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--module", "ziniao", "--query", `{"page":1}`})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	if got := out.String(); !strings.Contains(got, `"api": "list"`) {
+		t.Fatalf("http output = %s", got)
+	}
+}
+
+func TestHTTPCommandUsesDefaultModuleFromState(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvConfigDir, dir)
+	t.Setenv(config.EnvModule, "")
+
+	if err := config.SaveState(config.State{Module: "ziniao"}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--query", `{"page":1}`})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	if got := out.String(); !strings.Contains(got, `"api": "list"`) {
+		t.Fatalf("http output = %s", got)
+	}
+}
+
+func TestHTTPCommandUsesDefaultModuleFromEnv(t *testing.T) {
+	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvConfigDir, t.TempDir())
+	t.Setenv(config.EnvModule, "ziniao")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	if got := out.String(); !strings.Contains(got, `"api": "list"`) {
+		t.Fatalf("http output = %s", got)
+	}
+}
+
+func TestHTTPCommandFlagOverridesDefaultModule(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvConfigDir, dir)
+	t.Setenv(config.EnvModule, "erp")
+
+	if err := config.SaveState(config.State{Module: "ziniao"}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--module", "ziniao"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
@@ -90,11 +156,12 @@ func TestHTTPCommandUsesMockBackend(t *testing.T) {
 
 func TestHTTPCommandRejectsInvalidQueryJSON(t *testing.T) {
 	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvModule, "ziniao")
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd := NewRootCommand(&out, &errOut)
-	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", "not-json"})
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--query", "not-json"})
 
 	err := cmd.Execute()
 	if err == nil {
@@ -107,11 +174,12 @@ func TestHTTPCommandRejectsInvalidQueryJSON(t *testing.T) {
 
 func TestHTTPCommandRejectsQueryArray(t *testing.T) {
 	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvModule, "ziniao")
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd := NewRootCommand(&out, &errOut)
-	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--provider", "ziniao", "--query", "[]"})
+	cmd.SetArgs([]string{"http", "GET", "/api/user/list", "--query", "[]"})
 
 	err := cmd.Execute()
 	if err == nil {
@@ -122,8 +190,10 @@ func TestHTTPCommandRejectsQueryArray(t *testing.T) {
 	}
 }
 
-func TestHTTPCommandRequiresProvider(t *testing.T) {
+func TestHTTPCommandRequiresModule(t *testing.T) {
 	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvConfigDir, t.TempDir())
+	t.Setenv(config.EnvModule, "")
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
@@ -134,8 +204,66 @@ func TestHTTPCommandRequiresProvider(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "provider") && !strings.Contains(errOut.String(), "provider is required") {
+	if !strings.Contains(err.Error(), "module") && !strings.Contains(errOut.String(), "module is required") {
 		t.Fatalf("error = %v, stderr = %s", err, errOut.String())
+	}
+}
+
+func TestConfigModuleSetAndGet(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(config.EnvConfigDir, dir)
+	t.Setenv(config.EnvModule, "")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"config", "module", "set", "ziniao"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("set Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "ziniao") {
+		t.Fatalf("set output = %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	cmd.SetArgs([]string{"config", "module", "get"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("get Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	if got := strings.TrimSpace(out.String()); got != "ziniao" {
+		t.Fatalf("get output = %q, want ziniao", got)
+	}
+}
+
+func TestConfigModuleClear(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(config.EnvConfigDir, dir)
+	t.Setenv(config.EnvModule, "")
+
+	if err := config.SaveState(config.State{Module: "ziniao"}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"config", "module", "clear"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("clear Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	cmd.SetArgs([]string{"config", "module", "get"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("get after clear error = nil, want error")
+	}
+	if !strings.Contains(errOut.String(), "no default module configured") {
+		t.Fatalf("stderr = %s", errOut.String())
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 )
 
 type Backend interface {
-	Proxy(ctx context.Context, provider string, method, path string, query, body json.RawMessage) (json.RawMessage, error)
+	Proxy(ctx context.Context, module string, method, path string, query, body json.RawMessage) (json.RawMessage, error)
 	Catalog(ctx context.Context, module, business, api string, full bool) (json.RawMessage, error)
 }
 

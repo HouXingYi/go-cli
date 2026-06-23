@@ -122,12 +122,12 @@ func NewMockBackend() *MockBackend {
 	}
 }
 
-func (b *MockBackend) Proxy(ctx context.Context, provider string, method, path string, query, body json.RawMessage) (json.RawMessage, error) {
-	provider = normalize(provider)
+func (b *MockBackend) Proxy(ctx context.Context, module string, method, path string, query, body json.RawMessage) (json.RawMessage, error) {
+	module = normalize(module)
 	method = strings.ToUpper(strings.TrimSpace(method))
 	trimmed := trimPath(path)
 
-	for business, docs := range b.apis[provider] {
+	for business, docs := range b.apis[module] {
 		_ = business
 		for _, doc := range docs {
 			if !pathMatches(doc.URL, trimmed) {
@@ -140,7 +140,7 @@ func (b *MockBackend) Proxy(ctx context.Context, provider string, method, path s
 		}
 	}
 
-	return nil, apperr.New(apperr.KindAPI, fmt.Sprintf("path %q not found for provider %q", path, provider), "run zn-cli api to inspect available modules and APIs.")
+	return nil, apperr.New(apperr.KindAPI, fmt.Sprintf("path %q not found for module %q", path, module), "run zn-cli api to inspect available modules and APIs.")
 }
 
 func (b *MockBackend) Catalog(ctx context.Context, module, business, api string, full bool) (json.RawMessage, error) {

@@ -45,6 +45,7 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 	}
 
 	root.AddCommand(newAuthCommand(rt))
+	root.AddCommand(newConfigCommand(rt))
 	root.AddCommand(newHTTPCommand(rt))
 	root.AddCommand(newAPICommand(rt))
 	root.AddCommand(newVersionCommand(rt))

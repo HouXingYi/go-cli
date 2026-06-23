@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -50,7 +51,7 @@ func newAuthCommand(rt *runtime) *cobra.Command {
 }
 
 func newHTTPCommand(rt *runtime) *cobra.Command {
-	var provider string
+	var module string
 	var query string
 	var body string
 
@@ -59,8 +60,9 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 		Short: "Send an authenticated HTTP request",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if strings.TrimSpace(provider) == "" {
-				return rt.writeCommandError(apperr.New(apperr.KindConfig, "provider is required", "use --provider ziniao or --provider erp."))
+			resolvedModule, err := config.ResolveModule(module)
+			if err != nil {
+				return rt.writeCommandError(err)
 			}
 
 			cfg, err := rt.loadConfig()
@@ -82,7 +84,7 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 			}
 
 			be := backend.New(cfg)
-			data, err := be.Proxy(cmd.Context(), provider, args[0], args[1], rawQuery, rawBody)
+			data, err := be.Proxy(cmd.Context(), resolvedModule, args[0], args[1], rawQuery, rawBody)
 			if err != nil {
 				return rt.writeCommandError(err)
 			}
@@ -91,11 +93,81 @@ func newHTTPCommand(rt *runtime) *cobra.Command {
 		},
 	}
 
-	httpCmd.Flags().StringVar(&provider, "provider", "", "service provider identifier (required)")
+	httpCmd.Flags().StringVar(&module, "module", "", "module identifier (overrides default)")
 	httpCmd.Flags().StringVar(&query, "query", "", "JSON query parameters object")
 	httpCmd.Flags().StringVar(&body, "body", "", "JSON request body")
-	_ = httpCmd.MarkFlagRequired("provider")
 	return httpCmd
+}
+
+func newConfigCommand(rt *runtime) *cobra.Command {
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Manage CLI configuration",
+	}
+	configCmd.AddCommand(newConfigModuleCommand(rt))
+	return configCmd
+}
+
+func newConfigModuleCommand(rt *runtime) *cobra.Command {
+	moduleCmd := &cobra.Command{
+		Use:   "module",
+		Short: "Manage default module",
+	}
+
+	setCmd := &cobra.Command{
+		Use:   "set <module>",
+		Short: "Set default module",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			module := config.NormalizeModule(args[0])
+			if module == "" {
+				return rt.writeCommandError(apperr.New(apperr.KindConfig, "module name is required", "pass a module name, e.g. ziniao."))
+			}
+			if err := config.SaveState(config.State{Module: module}); err != nil {
+				return rt.writeCommandError(err)
+			}
+			data := map[string]string{"module": module}
+			return rt.renderer().Success(fmt.Sprintf("Default module set to %s.", module), data)
+		},
+	}
+
+	getCmd := &cobra.Command{
+		Use:   "get",
+		Short: "Show default module",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			module := config.NormalizeModule(os.Getenv(config.EnvModule))
+			source := "environment"
+			if module == "" {
+				state, err := config.LoadState()
+				if err != nil {
+					return rt.writeCommandError(err)
+				}
+				module = state.Module
+				source = "config"
+			}
+			if module == "" {
+				return rt.writeCommandError(apperr.New(apperr.KindConfig, "no default module configured", "run zn-cli config module set <name> or zn-cli api to list modules."))
+			}
+			data := map[string]string{"module": module, "source": source}
+			return rt.renderer().Success(module, data)
+		},
+	}
+
+	clearCmd := &cobra.Command{
+		Use:   "clear",
+		Short: "Clear persisted default module",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := config.ClearState(); err != nil {
+				return rt.writeCommandError(err)
+			}
+			return rt.renderer().Success("Default module cleared.", map[string]string{"status": "cleared"})
+		},
+	}
+
+	moduleCmd.AddCommand(setCmd, getCmd, clearCmd)
+	return moduleCmd
 }
 
 func newAPICommand(rt *runtime) *cobra.Command {
