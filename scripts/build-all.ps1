@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$AppName = "ziniao"
+$AppName = "zn-cli"
 $Entry = "./cmd/ziniao"
 $DistDir = "dist"
 

@@ -248,14 +248,12 @@ func runAPIQuery(ctx context.Context, be backend.Backend, args []string, full bo
 		return catalog.FormatBusinesses(items), items, err
 	case 2:
 		if full {
-			items, err := catalog.ParseFullAPIs(raw)
-			return formatJSON(items), items, err
+			return formatJSONRaw(raw), raw, nil
 		}
 		items, err := catalog.ParseAPISummaries(raw)
 		return catalog.FormatAPISummaries(items), items, err
 	default:
-		doc, err := catalog.ParseAPIDocument(raw)
-		return formatJSON(doc), doc, err
+		return formatJSONRaw(raw), raw, nil
 	}
 }
 

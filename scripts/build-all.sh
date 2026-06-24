@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="ziniao"
+APP_NAME="zn-cli"
 ENTRY="./cmd/ziniao"
 DIST_DIR="dist"
 

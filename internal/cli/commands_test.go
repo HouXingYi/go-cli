@@ -57,6 +57,42 @@ func TestAPIShowsDocument(t *testing.T) {
 	}
 }
 
+func TestAPIShowsRawDocumentFields(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"api", "ziniao", "user", "list"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, `"requestBody"`) {
+		t.Fatalf("api document output missing requestBody: %s", got)
+	}
+	if !strings.Contains(got, `"example"`) {
+		t.Fatalf("api document output missing example: %s", got)
+	}
+}
+
+func TestAPIFullShowsRawDocumentFields(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := NewRootCommand(&out, &errOut)
+	cmd.SetArgs([]string{"api", "ziniao", "user", "--full"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, `"requestBody"`) {
+		t.Fatalf("api --full output missing requestBody: %s", got)
+	}
+	if !strings.Contains(got, `"example"`) {
+		t.Fatalf("api --full output missing example: %s", got)
+	}
+}
+
 func TestAPIRejectsFullWithAPIName(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer

@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set APP_NAME=ziniao
+set APP_NAME=zn-cli
 set ENTRY=./cmd/ziniao
 set DIST_DIR=dist
 

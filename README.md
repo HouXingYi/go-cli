@@ -1,6 +1,6 @@
 # ziniao
 
-`ziniao` 是一个使用 Go 编写的命令行工具，通过 vendor-proxy 调用后端业务接口并查询 API 目录。CLI 名称为 `zn-cli`（当前版本 `0.1.0`），构建产物通常命名为 `ziniao` 或 `ziniao.exe`。
+`ziniao` 是一个使用 Go 编写的命令行工具，通过 vendor-proxy 调用后端业务接口并查询 API 目录。CLI 名称为 `zn-cli`（当前版本 `0.1.0`），构建产物通常命名为 `zn-cli` 或 `zn-cli.exe`。
 
 完整命令说明见 [docs/cli-api-docs.md](docs/cli-api-docs.md)。
 
@@ -37,13 +37,13 @@ zn-cli agent guide
 构建当前平台：
 
 ```bash
-go build -o bin/ziniao ./cmd/ziniao
+go build -o bin/zn-cli ./cmd/ziniao
 ```
 
 Windows：
 
 ```bash
-go build -o bin/ziniao.exe ./cmd/ziniao
+go build -o bin/zn-cli.exe ./cmd/ziniao
 ```
 
 一次构建多个平台：
@@ -73,14 +73,14 @@ bash scripts/build-all.sh
 查看帮助：
 
 ```bash
-ziniao --help
+zn-cli --help
 ```
 
 校验本地鉴权配置（不会向后端发请求，也不会写入磁盘）：
 
 ```bash
 export CLI_AUTH_KEY=your-key
-ziniao auth
+zn-cli auth
 ```
 
 推荐工作流：先查看 API 目录，设置默认大模块（module），再发送请求：
@@ -89,27 +89,27 @@ ziniao auth
 export CLI_AUTH_KEY=your-key
 export VENDOR_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
 
-ziniao api
-ziniao config module set ziniao
-ziniao http GET /api/user/list --query '{"page":1,"pageSize":20}'
-ziniao http POST /api/user/create --body '{"name":"test"}'
+zn-cli api
+zn-cli config module set ziniao
+zn-cli http GET /api/user/list --query '{"page":1,"pageSize":20}'
+zn-cli http POST /api/user/create --body '{"name":"test"}'
 
 # 临时切换大模块
-ziniao http GET /api/order/list --module erp
+zn-cli http GET /api/order/list --module erp
 ```
 
 查看 API 目录（未设置 `VENDOR_PROXY_BASE` 时使用内置 MockBackend）：
 
 ```bash
-ziniao api
-ziniao api ziniao user
-ziniao api ziniao user list
+zn-cli api
+zn-cli api ziniao user
+zn-cli api ziniao user list
 ```
 
 查看版本：
 
 ```bash
-ziniao version
+zn-cli version
 ```
 
 ## 配置
@@ -216,7 +216,7 @@ export CLI_AUTH_KEY=dev
 go run ./cmd/ziniao http GET /api/user/list --query 'not-json'
 ```
 
-构建二进制后，将 `go run ./cmd/ziniao` 换成 `bin/ziniao` 或 `bin/ziniao.exe` 做同样检查。
+构建二进制后，将 `go run ./cmd/ziniao` 换成 `bin/zn-cli` 或 `bin/zn-cli.exe` 做同样检查。
 
 ### 联调真实后端（可选）
 
@@ -236,18 +236,18 @@ go run ./cmd/ziniao http GET /api/user/list --module ziniao --query '{"page":1,"
 详见上文「从源码构建」。发布前建议：
 
 ```bash
-go build -o bin/ziniao ./cmd/ziniao
+go build -o bin/zn-cli ./cmd/ziniao
 bash scripts/build-all.sh
 ```
 
-构建后用 `bin/ziniao` 再跑一遍冒烟检查清单。
+构建后用 `bin/zn-cli` 再跑一遍冒烟检查清单。
 
 ### 按改动类型的自测清单
 
 | 改动范围 | 建议动作 |
 | --- | --- |
 | CLI 命令 / 参数 / 错误文案 | `go test ./internal/cli/...` + Mock 冒烟清单 |
-| Mock 目录或模拟响应 | `go test ./internal/backend/...` + `ziniao api` / `ziniao http` 手动确认 |
+| Mock 目录或模拟响应 | `go test ./internal/backend/...` + `zn-cli api` / `zn-cli http` 手动确认 |
 | HTTP 请求路径、鉴权头、envelope | `go test ./internal/backend/...`；有环境则加真实后端联调 |
 | `config` / 状态文件 | `go test ./internal/config/...`；冒烟 `config module set/get/clear` |
 | `skills/zn-cli/SKILL.md` | `go test ./internal/agent/...`（嵌入内容与源文件必须一致） |
@@ -262,11 +262,11 @@ bash scripts/build-all.sh
 | 错误信息 | 原因 | 处理建议 |
 | --- | --- | --- |
 | `auth key is required` | 未设置 `CLI_AUTH_KEY` | 执行 `export CLI_AUTH_KEY=...` |
-| `module is required` | `http` 未配置默认 module 且未传 `--module` | 执行 `ziniao config module set ziniao` 或添加 `--module ziniao` |
+| `module is required` | `http` 未配置默认 module 且未传 `--module` | 执行 `zn-cli config module set ziniao` 或添加 `--module ziniao` |
 | `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
 | `query is invalid json` | `--query` 不是合法 JSON 对象 | 传入合法 JSON 对象，例如 `'{"page":1}'` |
 | `request timed out` | 请求超时 | 检查网络连接 |
-| `module/business/api "..." not found` | 目录中无对应项 | 运行 `ziniao api` 查看可用目录 |
+| `module/business/api "..." not found` | 目录中无对应项 | 运行 `zn-cli api` 查看可用目录 |
 
 更多细节见 [docs/cli-api-docs.md](docs/cli-api-docs.md)。
 

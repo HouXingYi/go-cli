@@ -4,7 +4,7 @@
 
 `zn-cli`（`internal/config.AppName`，当前版本 `0.1.0`）
 
-可执行文件入口：`cmd/ziniao/main.go`，构建产物通常命名为 `ziniao` 或 `ziniao.exe`。
+可执行文件入口：`cmd/ziniao/main.go`，构建产物通常命名为 `zn-cli` 或 `zn-cli.exe`。
 
 ## 命令总览
 

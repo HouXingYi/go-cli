@@ -28,6 +28,8 @@ type mockAPI struct {
 	URL         string
 	Method      string
 	Params      interface{}
+	RequestBody interface{}
+	Example     interface{}
 	Response    interface{}
 }
 
@@ -62,6 +64,12 @@ func NewMockBackend() *MockBackend {
 						Params: map[string]interface{}{
 							"query": map[string]string{"page": "number", "pageSize": "number", "keyword": "string"},
 							"body":  nil,
+						},
+						RequestBody: map[string]interface{}{
+							"required": false,
+						},
+						Example: map[string]interface{}{
+							"request": map[string]int{"page": 1},
 						},
 						Response: map[string]interface{}{
 							"code": "number", "message": "string",
@@ -296,10 +304,17 @@ func docsToFull(docs []mockAPI) []map[string]interface{} {
 }
 
 func docToFull(doc mockAPI) map[string]interface{} {
-	return map[string]interface{}{
+	out := map[string]interface{}{
 		"name": doc.Name, "title": doc.Title, "description": doc.Description,
 		"url": doc.URL, "method": doc.Method, "params": doc.Params, "response": doc.Response,
 	}
+	if doc.RequestBody != nil {
+		out["requestBody"] = doc.RequestBody
+	}
+	if doc.Example != nil {
+		out["example"] = doc.Example
+	}
+	return out
 }
 
 func normalize(value string) string {
