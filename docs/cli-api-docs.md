@@ -235,9 +235,9 @@ zn-cli api [module] [business] [api] [flags]
 | --- | --- |
 | `zn-cli api` | `GET /cli-api` |
 | `zn-cli api <module>` | `GET /cli-api/{module}` |
-| `zn-cli api <module> <business>` | `GET /cli-api/{module}?business={business}` |
-| `zn-cli api <module> <business> --full` | `GET /cli-api/{module}?business={business}&full=true` |
-| `zn-cli api <module> <business> <api>` | `GET /cli-api/{module}?business={business}&api={api}` |
+| `zn-cli api <module> <business>` | `GET /cli-api/{module}/apis?business={business}` |
+| `zn-cli api <module> <business> --full` | `GET /cli-api/{module}/apis?business={business}&full=true` |
+| `zn-cli api <module> <business> <api>` | `GET /cli-api/{module}/apis?business={business}&api={api}` |
 
 **参数校验：**
 

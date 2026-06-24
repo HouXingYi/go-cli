@@ -50,6 +50,9 @@ func (b *HTTPBackend) Catalog(ctx context.Context, module, business, api string,
 	requestPath := "/cli-api"
 	if module != "" {
 		requestPath += "/" + strings.Trim(strings.TrimSpace(module), "/")
+		if business != "" {
+			requestPath += "/apis"
+		}
 	}
 
 	query := url.Values{}
@@ -80,8 +83,7 @@ func (b *HTTPBackend) do(ctx context.Context, method, path string, query url.Val
 		reader = bytes.NewReader(payload)
 	}
 
-	ref := &url.URL{Path: path}
-	resolved := b.baseURL.ResolveReference(ref)
+	resolved := joinBasePath(b.baseURL, path)
 	if len(query) > 0 {
 		resolved.RawQuery = query.Encode()
 	}
@@ -114,4 +116,25 @@ func (b *HTTPBackend) do(ctx context.Context, method, path string, query url.Val
 	}
 
 	return parseEnvelope(resp.StatusCode, responseBody)
+}
+
+// joinBasePath appends suffix to base URL path without losing the base prefix.
+// Unlike url.ResolveReference, an absolute-looking suffix does not replace the base path.
+func joinBasePath(base *url.URL, suffix string) *url.URL {
+	u := *base
+	suffix = strings.Trim(suffix, "/")
+	basePath := strings.TrimSuffix(u.Path, "/")
+	if suffix == "" {
+		u.Path = basePath
+		if u.Path == "" {
+			u.Path = "/"
+		}
+		return &u
+	}
+	if basePath == "" || basePath == "/" {
+		u.Path = "/" + suffix
+		return &u
+	}
+	u.Path = basePath + "/" + suffix
+	return &u
 }
