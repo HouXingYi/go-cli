@@ -26,7 +26,8 @@ func NewHTTPBackend(cfg config.Config) *HTTPBackend {
 		baseURL: parsed,
 		authKey: strings.TrimSpace(cfg.AuthKey),
 		httpClient: &http.Client{
-			Timeout: config.DefaultTimeout,
+			Timeout:   config.DefaultTimeout,
+			Transport: newHTTPTransport(),
 		},
 	}
 }

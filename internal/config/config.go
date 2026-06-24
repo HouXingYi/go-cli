@@ -20,6 +20,7 @@ const (
 
 	EnvProxyBaseURL = "VENDOR_PROXY_BASE"
 	EnvAuthKey      = "CLI_AUTH_KEY"
+	EnvDebug        = "ZINIAO_DEBUG"
 )
 
 const DefaultTimeout = 10 * time.Second
