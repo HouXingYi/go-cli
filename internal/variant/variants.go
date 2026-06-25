@@ -4,7 +4,7 @@ package variant
 var Ent = Variant{
 	ID:      "ent",
 	AppName: "zn-ent",
-	CLIType: "ent",
+	CLIType: "zn-ent",
 	StateDir: "zn-ent",
 }
 
@@ -12,6 +12,6 @@ var Ent = Variant{
 var Eco = Variant{
 	ID:      "eco",
 	AppName: "zn-eco",
-	CLIType: "eco",
+	CLIType: "zn-eco",
 	StateDir: "zn-eco",
 }

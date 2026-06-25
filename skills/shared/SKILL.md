@@ -25,7 +25,7 @@ Hint: run {{AppName}} config module set <name> or pass --module.
 任务开始时按以下顺序执行：
 
 1. `{{AppName}} agent guide` — 加载本文档（若已在上下文中可跳过）。
-2. `{{AppName}} auth` — 确认 `CLI_AUTH_KEY` 已设置（不发起网络请求）。
+2. `{{AppName}} auth` — 确认 `CLI_PROXY_TOKEN` 已设置（不发起网络请求）。
 3. `{{AppName}} api` — 列出一级大模块（如 `ziniao`、`erp`）。
 4. `{{AppName}} config module set <module>` — 持久化 module，后续 `http` 无需每次传 `--module`。
 5. `{{AppName}} api <module> <business>` — 列出 API；用 `{{AppName}} api <module> <business> <api>` 查看参数文档。
@@ -35,7 +35,7 @@ Hint: run {{AppName}} config module set <name> or pass --module.
 
 ## 鉴权
 
-- 在调用 `http` 或远程 `api` 之前，于环境中设置 `CLI_AUTH_KEY`。
+- 在调用 `http` 或远程 `api` 之前，于环境中设置 `CLI_PROXY_TOKEN`。
 - `{{AppName}} auth` 仅检查该变量非空；不联系后端，也不将密钥写入磁盘。
 - 切勿在命令行传入密钥。日志与错误输出不会回显密钥。
 
@@ -106,14 +106,14 @@ CLI 会将调用包装为 vendor-proxy 的 POST；你只需指定逻辑上的 HT
 
 | 条件 | 行为 |
 | --- | --- |
-| 未设置 `VENDOR_PROXY_BASE` | MockBackend — `api` 和 `http` 离线可用，使用内置示例目录 |
-| 已设置 `VENDOR_PROXY_BASE` | HTTPBackend — 真实 vendor-proxy；需要有效的 `CLI_AUTH_KEY` |
+| 未设置 `CLI_PROXY_BASE` | MockBackend — `api` 和 `http` 离线可用，使用内置示例目录 |
+| 已设置 `CLI_PROXY_BASE` | HTTPBackend — 真实 vendor-proxy；需要有效的 `CLI_PROXY_TOKEN` |
 
-沙箱环境会自动注入 `VENDOR_PROXY_BASE` 和 `CLI_AUTH_KEY`。
+沙箱环境会自动注入 `CLI_PROXY_BASE` 和 `CLI_PROXY_TOKEN`。
 
 ## 安全
 
-- `CLI_AUTH_KEY` 仅通过环境变量提供；没有 `--token` 或密钥配置文件。
+- `CLI_PROXY_TOKEN` 仅通过环境变量提供；没有 `--token` 或密钥配置文件。
 - 不要在 Agent 消息中记录或重复密钥。
 - 状态文件（`state.yaml`）只保存默认 module 名称，不保存凭证。
 
@@ -121,13 +121,13 @@ CLI 会将调用包装为 vendor-proxy 的 POST；你只需指定逻辑上的 HT
 
 | 错误 | 原因 | 恢复方式 |
 | --- | --- | --- |
-| `auth key is required` | 未设置 `CLI_AUTH_KEY` | 设置环境变量；运行 `{{AppName}} auth` 验证 |
+| `auth key is required` | 未设置 `CLI_PROXY_TOKEN` | 设置环境变量；运行 `{{AppName}} auth` 验证 |
 | `module is required` | 无默认 module 且未传 `--module` | `{{AppName}} config module set <name>` 或传入 `--module` |
 | `body is invalid json` | `--body` 不是合法 JSON | 使用单引号包裹的 JSON 字符串 |
 | `query is invalid json` | `--query` 不是 JSON 对象 | 例如 `'{"page":1}'` |
 | `request timed out` | 网络超时（默认 10s） | 检查网络 / 代理 |
 | `module/business/api "..." not found` | 目录中无对应项 | 运行 `{{AppName}} api` 查看有效名称 |
-| HTTP 401 / 鉴权错误 | 密钥无效 | 与运维确认 `CLI_AUTH_KEY` |
+| HTTP 401 / 鉴权错误 | 密钥无效 | 与运维确认 `CLI_PROXY_TOKEN` |
 
 ## 业务域 Skill
 

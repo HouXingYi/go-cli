@@ -70,7 +70,7 @@ func TestHTTPBackendProxy(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Fatalf("Authorization = %s", r.Header.Get("Authorization"))
 		}
-		if r.Header.Get("Cli-Type") != "ent" {
+		if r.Header.Get("Cli-Type") != "zn-ent" {
 			t.Fatalf("Cli-Type = %s", r.Header.Get("Cli-Type"))
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -81,7 +81,7 @@ func TestHTTPBackendProxy(t *testing.T) {
 	be := NewHTTPBackend(config.Config{
 		ProxyBaseURL:  server.URL,
 		AuthKey:       "test-key",
-		CLIType:       "ent",
+		CLIType:       "zn-ent",
 		CLITypeHeader: "Cli-Type",
 	})
 
@@ -110,7 +110,7 @@ func TestHTTPBackendCatalog(t *testing.T) {
 		if r.URL.Query().Get("business") != "user" {
 			t.Fatalf("business = %s", r.URL.Query().Get("business"))
 		}
-		if r.Header.Get("Cli-Type") != "ent" {
+		if r.Header.Get("Cli-Type") != "zn-ent" {
 			t.Fatalf("Cli-Type = %s", r.Header.Get("Cli-Type"))
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -121,7 +121,7 @@ func TestHTTPBackendCatalog(t *testing.T) {
 	be := NewHTTPBackend(config.Config{
 		ProxyBaseURL:  server.URL,
 		AuthKey:       "test-key",
-		CLIType:       "ent",
+		CLIType:       "zn-ent",
 		CLITypeHeader: "Cli-Type",
 	})
 

@@ -8,8 +8,8 @@
 
 | 产物 | 入口 | 状态目录 | 内置 cli-type |
 | --- | --- | --- | --- |
-| `zn-ent` | `./cmd/zn-ent` | `UserConfigDir()/zn-ent/` | `ent`（占位，后端定稿后可改） |
-| `zn-eco` | `./cmd/zn-eco` | `UserConfigDir()/zn-eco/` | `eco`（占位，后端定稿后可改） |
+| `zn-ent` | `./cmd/zn-ent` | `UserConfigDir()/zn-ent/` | `zn-ent` |
+| `zn-eco` | `./cmd/zn-eco` | `UserConfigDir()/zn-eco/` | `zn-eco` |
 
 `zn-eco` 子命令与 flags 与 `zn-ent` 完全相同；下文示例默认使用 `zn-ent`，使用时将命令名替换为 `zn-eco` 即可。
 
@@ -90,15 +90,15 @@ zn-ent --help
 校验本地鉴权配置（不会向后端发请求，也不会写入磁盘）：
 
 ```bash
-export CLI_AUTH_KEY=your-key
+export CLI_PROXY_TOKEN=your-key
 zn-ent auth
 ```
 
 推荐工作流：先查看 API 目录，设置默认大模块（module），再发送请求：
 
 ```bash
-export CLI_AUTH_KEY=your-key
-export VENDOR_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
+export CLI_PROXY_TOKEN=your-key
+export CLI_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
 
 zn-ent api
 zn-ent config module set ziniao
@@ -109,7 +109,7 @@ zn-ent http POST /api/user/create --body '{"name":"test"}'
 zn-ent http GET /api/order/list --module erp
 ```
 
-查看 API 目录（未设置 `VENDOR_PROXY_BASE` 时使用内置 MockBackend）：
+查看 API 目录（未设置 `CLI_PROXY_BASE` 时使用内置 MockBackend）：
 
 ```bash
 zn-ent api
@@ -127,12 +127,12 @@ zn-ent version
 
 | 环境变量 | 说明 |
 | --- | --- |
-| `CLI_AUTH_KEY` | 鉴权密钥，HTTP 请求以 `Authorization: Bearer <key>` 发送 |
-| `VENDOR_PROXY_BASE` | vendor-proxy 基础 URL；设置后对接真实后端，未设置时使用 MockBackend |
+| `CLI_PROXY_TOKEN` | 鉴权密钥，HTTP 请求以 `Authorization: Bearer <key>` 发送 |
+| `CLI_PROXY_BASE` | vendor-proxy 基础 URL；设置后对接真实后端，未设置时使用 MockBackend |
 | `ZINIAO_MODULE` | 默认一级大模块；优先级低于 `http --module`，高于 `config module set` 持久化值 |
 | `ZINIAO_CONFIG_DIR` | CLI 状态目录；默认 `UserConfigDir()/<AppName>/`（`zn-ent` 或 `zn-eco`） |
 
-本地开发时只需 `CLI_AUTH_KEY` 即可使用 Mock 模式；沙箱环境由 `a1-browser-server` 自动注入上述变量。
+本地开发时只需 `CLI_PROXY_TOKEN` 即可使用 Mock 模式；沙箱环境由 `a1-browser-server` 自动注入上述变量。
 
 远程请求还会自动携带编译期内置的 `Cli-Type` 请求头（值因 `zn-ent` / `zn-eco` 而异）。
 
@@ -148,7 +148,7 @@ zn-ent version
 
 ## 密钥安全
 
-`CLI_AUTH_KEY` 仅通过环境变量提供，不提供 `--token` 或命令行密钥参数。错误信息和普通输出不会回显密钥。
+`CLI_PROXY_TOKEN` 仅通过环境变量提供，不提供 `--token` 或命令行密钥参数。错误信息和普通输出不会回显密钥。
 
 ## 开发
 
@@ -180,7 +180,7 @@ zn-ent version
 
 ### 本地手动冒烟（Mock 模式，无需后端）
 
-未设置 `VENDOR_PROXY_BASE` 时 CLI 走内置 MockBackend（见上文「配置」）；`CLI_AUTH_KEY` 任意非空值即可。
+未设置 `CLI_PROXY_BASE` 时 CLI 走内置 MockBackend（见上文「配置」）；`CLI_PROXY_TOKEN` 任意非空值即可。
 
 快速迭代：
 
@@ -194,17 +194,17 @@ go run ./cmd/zn-eco version
 Git Bash / Linux / macOS：
 
 ```bash
-export CLI_AUTH_KEY=dev
+export CLI_PROXY_TOKEN=dev
 export ZINIAO_CONFIG_DIR="$(mktemp -d)"
-unset VENDOR_PROXY_BASE
+unset CLI_PROXY_BASE
 ```
 
 PowerShell：
 
 ```powershell
-$env:CLI_AUTH_KEY = "dev"
+$env:CLI_PROXY_TOKEN = "dev"
 $env:ZINIAO_CONFIG_DIR = New-TemporaryFile | ForEach-Object { Remove-Item $_; New-Item -ItemType Directory -Path "$($_.FullName)-zn-ent" }
-Remove-Item Env:VENDOR_PROXY_BASE -ErrorAction SilentlyContinue
+Remove-Item Env:CLI_PROXY_BASE -ErrorAction SilentlyContinue
 ```
 
 冒烟检查清单（按顺序跑，预期均 exit 0）：
@@ -223,10 +223,10 @@ go run ./cmd/zn-ent agent guide | head -5
 负面用例（错误提示预期见下文「常见问题」表）：
 
 ```bash
-unset CLI_AUTH_KEY
+unset CLI_PROXY_TOKEN
 go run ./cmd/zn-ent auth
 
-export CLI_AUTH_KEY=dev
+export CLI_PROXY_TOKEN=dev
 go run ./cmd/zn-ent http GET /api/user/list --query 'not-json'
 ```
 
@@ -237,8 +237,8 @@ go run ./cmd/zn-ent http GET /api/user/list --query 'not-json'
 仅在需要验证 HTTPBackend 或沙箱对接时执行：
 
 ```bash
-export CLI_AUTH_KEY=your-key
-export VENDOR_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
+export CLI_PROXY_TOKEN=your-key
+export CLI_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
 go run ./cmd/zn-ent api
 go run ./cmd/zn-ent http GET /api/user/list --module ziniao --query '{"page":1,"pageSize":20}'
 ```
@@ -276,7 +276,7 @@ bash scripts/build-all.sh
 
 | 错误信息 | 原因 | 处理建议 |
 | --- | --- | --- |
-| `auth key is required` | 未设置 `CLI_AUTH_KEY` | 执行 `export CLI_AUTH_KEY=...` |
+| `auth key is required` | 未设置 `CLI_PROXY_TOKEN` | 执行 `export CLI_PROXY_TOKEN=...` |
 | `module is required` | `http` 未配置默认 module 且未传 `--module` | 执行 `zn-ent config module set ziniao` 或添加 `--module ziniao` |
 | `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
 | `query is invalid json` | `--query` 不是合法 JSON 对象 | 传入合法 JSON 对象，例如 `'{"page":1}'` |

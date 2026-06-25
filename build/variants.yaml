@@ -1,11 +1,11 @@
 variants:
   - id: ent
     app_name: zn-ent
-    cli_type: ent
+    cli_type: zn-ent
     entry: ./cmd/zn-ent
   - id: eco
     app_name: zn-eco
-    cli_type: eco
+    cli_type: zn-eco
     entry: ./cmd/zn-eco
 
 platforms:

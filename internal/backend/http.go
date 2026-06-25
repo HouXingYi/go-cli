@@ -76,7 +76,7 @@ func (b *HTTPBackend) Catalog(ctx context.Context, module, business, api string,
 
 func (b *HTTPBackend) do(ctx context.Context, method, path string, query url.Values, body interface{}) (json.RawMessage, error) {
 	if b.baseURL == nil || b.baseURL.Scheme == "" || b.baseURL.Host == "" {
-		return nil, apperr.New(apperr.KindConfig, "proxy base url is invalid", "set VENDOR_PROXY_BASE.")
+		return nil, apperr.New(apperr.KindConfig, "proxy base url is invalid", "set CLI_PROXY_BASE.")
 	}
 
 	var reader io.Reader
@@ -95,7 +95,7 @@ func (b *HTTPBackend) do(ctx context.Context, method, path string, query url.Val
 
 	req, err := http.NewRequestWithContext(ctx, method, resolved.String(), reader)
 	if err != nil {
-		return nil, apperr.Wrap(apperr.KindAPI, "failed to create request", "check VENDOR_PROXY_BASE and request path.", err)
+		return nil, apperr.Wrap(apperr.KindAPI, "failed to create request", "check CLI_PROXY_BASE and request path.", err)
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -114,7 +114,7 @@ func (b *HTTPBackend) do(ctx context.Context, method, path string, query url.Val
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, apperr.Wrap(apperr.KindNetwork, "request timed out", "check network connectivity.", err)
 		}
-		return nil, apperr.Wrap(apperr.KindNetwork, "request failed", "check VENDOR_PROXY_BASE and network connectivity.", err)
+		return nil, apperr.Wrap(apperr.KindNetwork, "request failed", "check CLI_PROXY_BASE and network connectivity.", err)
 	}
 	defer resp.Body.Close()
 

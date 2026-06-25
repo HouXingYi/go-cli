@@ -20,7 +20,7 @@ type envelope struct {
 func parseEnvelope(statusCode int, body []byte) (json.RawMessage, error) {
 	if statusCode == http.StatusUnauthorized {
 		message := authErrorMessage(body)
-		return nil, apperr.New(apperr.KindAuth, message, "check whether CLI_AUTH_KEY is valid.")
+		return nil, apperr.New(apperr.KindAuth, message, "check whether CLI_PROXY_TOKEN is valid.")
 	}
 	if statusCode < 200 || statusCode > 299 {
 		return nil, apperr.New(apperr.KindAPI, httpErrorMessage(statusCode, body), "check the API response and request parameters.")

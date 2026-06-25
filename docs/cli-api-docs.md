@@ -6,8 +6,8 @@
 
 | 产物 | 入口 | 内置 cli-type |
 | --- | --- | --- |
-| `zn-ent` | `cmd/zn-ent/main.go` | `ent` |
-| `zn-eco` | `cmd/zn-eco/main.go` | `eco` |
+| `zn-ent` | `cmd/zn-ent/main.go` | `zn-ent` |
+| `zn-eco` | `cmd/zn-eco/main.go` | `zn-eco` |
 
 变体注册表：`internal/variant`。`AppName`、状态目录、`Cli-Type` 均由编译变体决定，当前版本 `0.1.0`。
 
@@ -29,16 +29,16 @@ Commands:
 
 ## 环境变量
 
-沙箱环境由 `a1-browser-server` 注入以下变量；本地开发未设置 `VENDOR_PROXY_BASE` 时，CLI 使用内置 MockBackend 跑通命令。
+沙箱环境由 `a1-browser-server` 注入以下变量；本地开发未设置 `CLI_PROXY_BASE` 时，CLI 使用内置 MockBackend 跑通命令。
 
 | 环境变量 | 说明 |
 | --- | --- |
-| `CLI_AUTH_KEY` | 鉴权密钥，请求以 `Authorization: Bearer <key>` 发送 |
-| `VENDOR_PROXY_BASE` | vendor-proxy 基础 URL，例如 `https://api.example.com/api/v1/claw/vendor-proxy` |
+| `CLI_PROXY_TOKEN` | 鉴权密钥，请求以 `Authorization: Bearer <key>` 发送 |
+| `CLI_PROXY_BASE` | vendor-proxy 基础 URL，例如 `https://api.example.com/api/v1/claw/vendor-proxy` |
 | `ZINIAO_MODULE` | 默认一级大模块（module）；优先级低于 `http --module`，高于持久化配置 |
 | `ZINIAO_CONFIG_DIR` | CLI 状态目录；未设置时使用 `UserConfigDir()/<AppName>/`（`zn-ent` 或 `zn-eco`） |
 
-设置 `VENDOR_PROXY_BASE` 后，CLI 自动切换为 HTTPBackend 对接真实后端；未设置时 `http` 与 `api` 均走 MockBackend。远程请求自动携带 `Cli-Type` 头（值因变体而异）。
+设置 `CLI_PROXY_BASE` 后，CLI 自动切换为 HTTPBackend 对接真实后端；未设置时 `http` 与 `api` 均走 MockBackend。远程请求自动携带 `Cli-Type` 头（值因变体而异）。
 
 **术语说明：** CLI 统一使用 **module** 表示一级大模块（与 `api [module]` 一致）。后端对接文档中的 URL 路径段 `{provider}` 与 module 指同一值，见 [cli-integration.md](cli-integration.md)。
 
@@ -54,7 +54,7 @@ Commands:
 
 ```text
 Error: auth key is required
-Hint: set CLI_AUTH_KEY.
+Hint: set CLI_PROXY_TOKEN.
 ```
 
 `internal/output` 包保留 json 输出能力，后续可通过 Viper 扩展 `--output` 等配置项。
@@ -65,7 +65,7 @@ Hint: set CLI_AUTH_KEY.
 
 ### agent guide
 
-**说明：** 向 stdout 输出内置 Agent 使用指南（模板 `skills/shared/SKILL.md`，按变体渲染 `AppName`）。无需 `CLI_AUTH_KEY`，不访问网络。输出为原始 Markdown，不经 `Renderer` 包装，供 Agent 自举加载上下文。
+**说明：** 向 stdout 输出内置 Agent 使用指南（模板 `skills/shared/SKILL.md`，按变体渲染 `AppName`）。无需 `CLI_PROXY_TOKEN`，不访问网络。输出为原始 Markdown，不经 `Renderer` 包装，供 Agent 自举加载上下文。
 
 **命令：**
 
@@ -81,7 +81,7 @@ zn-ent agent guide
 
 ### auth
 
-**说明：** 校验 `CLI_AUTH_KEY` 环境变量是否已设置。当前实现**不会**向后端发送请求，也**不会**将配置写入磁盘。
+**说明：** 校验 `CLI_PROXY_TOKEN` 环境变量是否已设置。当前实现**不会**向后端发送请求，也**不会**将配置写入磁盘。
 
 **命令：**
 
@@ -93,7 +93,7 @@ zn-ent auth
 
 **前置条件：**
 
-- `CLI_AUTH_KEY` 非空
+- `CLI_PROXY_TOKEN` 非空
 
 **输出：**
 
@@ -104,7 +104,7 @@ Authentication configured successfully.
 **示例：**
 
 ```bash
-export CLI_AUTH_KEY=your-key
+export CLI_PROXY_TOKEN=your-key
 zn-ent auth
 ```
 
@@ -145,7 +145,7 @@ zn-ent config module clear
 
 ### http
 
-**说明：** 通过 vendor-proxy 代理转发业务请求。CLI 将用户指定的 HTTP 方法、路径、查询参数和请求体包装为代理请求，发往 `POST {VENDOR_PROXY_BASE}/cli/{module}/{path}`（后端文档中该路径段有时写作 `{provider}`，与 module 同义）。
+**说明：** 通过 vendor-proxy 代理转发业务请求。CLI 将用户指定的 HTTP 方法、路径、查询参数和请求体包装为代理请求，发往 `POST {CLI_PROXY_BASE}/cli/{module}/{path}`（后端文档中该路径段有时写作 `{provider}`，与 module 同义）。
 
 **命令：**
 
@@ -179,29 +179,29 @@ zn-ent http <method> <path> [flags]
 **请求行为：**
 
 - 实际 HTTP 方法固定为 `POST`（代理协议）
-- 目标 URL：`{VENDOR_PROXY_BASE}/cli/{module}/{trimmedPath}`
+- 目标 URL：`{CLI_PROXY_BASE}/cli/{module}/{trimmedPath}`
 - 代理请求体：`{"method":"GET","query":{...},"body":{...}}`
-- 自动设置 `Authorization: Bearer <CLI_AUTH_KEY>`
+- 自动设置 `Authorization: Bearer <CLI_PROXY_TOKEN>`
 - 自动设置 `Cli-Type: <编译变体值>`
 - 成功时输出响应信封中的 `data` 字段（JSON 美化）
 
-**前置条件：** 需要设置 `CLI_AUTH_KEY`；需要已配置默认 module 或传入 `--module`。
+**前置条件：** 需要设置 `CLI_PROXY_TOKEN`；需要已配置默认 module 或传入 `--module`。
 
 **错误处理：**
 
 | 场景 | 错误 kind | 典型 hint |
 | --- | --- | --- |
-| 未设置 `CLI_AUTH_KEY` | `config` | set CLI_AUTH_KEY. |
+| 未设置 `CLI_PROXY_TOKEN` | `config` | set CLI_PROXY_TOKEN. |
 | 未配置 module | `config` | run zn-ent config module set \<name\> or pass --module. |
-| HTTP 401 | `auth` | check whether CLI_AUTH_KEY is valid. |
+| HTTP 401 | `auth` | check whether CLI_PROXY_TOKEN is valid. |
 | HTTP 200 且 `ret != 0` | `api` | 按 ret 码提示（如 30002 用户未配置鉴权凭证） |
 | 超时 | `network` | check network connectivity. |
 
 **推荐工作流（LLM 沙箱）：**
 
 ```bash
-export CLI_AUTH_KEY=your-key
-export VENDOR_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
+export CLI_PROXY_TOKEN=your-key
+export CLI_PROXY_BASE=https://api.example.com/api/v1/claw/vendor-proxy
 
 zn-ent api
 zn-ent config module set ziniao
@@ -212,7 +212,7 @@ zn-ent http POST /api/user/create --body '{"name":"test"}'
 zn-ent http GET /api/order/list --module erp
 ```
 
-本地无后端时（未设置 `VENDOR_PROXY_BASE`），MockBackend 根据 catalog 中的 path/method 返回模拟 `data`。
+本地无后端时（未设置 `CLI_PROXY_BASE`），MockBackend 根据 catalog 中的 path/method 返回模拟 `data`。
 
 ---
 
@@ -344,7 +344,7 @@ zn-ent version
 **输出：**
 
 ```text
-zn-ent 0.1.0 (cli-type: ent)
+zn-ent 0.1.0 (cli-type: zn-ent)
 ```
 
 ---
@@ -354,7 +354,7 @@ zn-ent 0.1.0 (cli-type: ent)
 沙箱内 LLM 推荐按以下顺序调用：
 
 1. `zn-ent agent guide` — 加载 Agent 使用规范（可选，若已在上下文中可跳过）
-2. `zn-ent auth` — 确认 `CLI_AUTH_KEY` 已配置
+2. `zn-ent auth` — 确认 `CLI_PROXY_TOKEN` 已配置
 3. `zn-ent api` — 列出可用大模块
 4. `zn-ent config module set <module>` — 持久化当前任务的大模块
 5. `zn-ent http <method> <path> [--query ...] [--body ...]` — 发送业务请求（无需每次传 module）
@@ -367,7 +367,7 @@ zn-ent 0.1.0 (cli-type: ent)
 
 | 错误信息 | 原因 | 处理建议 |
 | --- | --- | --- |
-| `auth key is required` | 未设置 `CLI_AUTH_KEY` | 执行 `export CLI_AUTH_KEY=...` |
+| `auth key is required` | 未设置 `CLI_PROXY_TOKEN` | 执行 `export CLI_PROXY_TOKEN=...` |
 | `module is required` | `http` 未配置默认 module 且未传 `--module` | 执行 `zn-ent config module set ziniao` 或添加 `--module ziniao` |
 | `body is invalid json` | `--body` 不是合法 JSON | 传入合法 JSON 对象或数组 |
 | `query is invalid json` | `--query` 不是合法 JSON 对象 | 传入合法 JSON 对象，例如 `'{"page":1}'` |

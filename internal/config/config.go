@@ -17,8 +17,8 @@ const (
 	OutputJSON    = "json"
 	DefaultOutput = OutputText
 
-	EnvProxyBaseURL = "VENDOR_PROXY_BASE"
-	EnvAuthKey      = "CLI_AUTH_KEY"
+	EnvProxyBaseURL = "CLI_PROXY_BASE"
+	EnvProxyToken   = "CLI_PROXY_TOKEN"
 	EnvDebug        = "ZINIAO_DEBUG"
 )
 
@@ -66,7 +66,7 @@ func Load(v *viper.Viper) (Config, error) {
 	vr := variant.Current()
 	return Config{
 		ProxyBaseURL:  strings.TrimSpace(os.Getenv(EnvProxyBaseURL)),
-		AuthKey:       strings.TrimSpace(os.Getenv(EnvAuthKey)),
+		AuthKey:       firstNonEmptyEnv(EnvProxyToken, "VENDOR_PROXY_TOKEN"),
 		CLIType:       strings.TrimSpace(vr.CLIType),
 		CLITypeHeader: vr.CLITypeHeaderName(),
 	}, nil
@@ -78,7 +78,7 @@ func (c Config) UseRemoteBackend() bool {
 
 func (c Config) RequireAuthKey() error {
 	if strings.TrimSpace(c.AuthKey) == "" {
-		return apperr.New(apperr.KindConfig, "auth key is required", "set CLI_AUTH_KEY.")
+		return apperr.New(apperr.KindConfig, "auth key is required", "set CLI_PROXY_TOKEN.")
 	}
 	return nil
 }
@@ -93,4 +93,13 @@ func ModuleRequiredHint() string {
 
 func ConfigModuleClearHint() string {
 	return fmt.Sprintf("check state file or run %s config module clear.", AppName())
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }

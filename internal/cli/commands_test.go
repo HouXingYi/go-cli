@@ -23,7 +23,7 @@ func TestAuthReportsMissingAuthKey(t *testing.T) {
 	if !strings.Contains(got, "auth key is required") {
 		t.Fatalf("stderr missing auth key error: %s", got)
 	}
-	if !strings.Contains(got, "set CLI_AUTH_KEY") {
+	if !strings.Contains(got, "set CLI_PROXY_TOKEN") {
 		t.Fatalf("stderr missing auth key hint: %s", got)
 	}
 }
@@ -109,7 +109,7 @@ func TestAPIRejectsFullWithAPIName(t *testing.T) {
 }
 
 func TestHTTPCommandUsesMockBackend(t *testing.T) {
-	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvProxyToken, "test-key")
 	t.Setenv(config.EnvConfigDir, t.TempDir())
 	t.Setenv(config.EnvModule, "")
 
@@ -128,7 +128,7 @@ func TestHTTPCommandUsesMockBackend(t *testing.T) {
 
 func TestHTTPCommandUsesDefaultModuleFromState(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvProxyToken, "test-key")
 	t.Setenv(config.EnvConfigDir, dir)
 	t.Setenv(config.EnvModule, "")
 
@@ -150,7 +150,7 @@ func TestHTTPCommandUsesDefaultModuleFromState(t *testing.T) {
 }
 
 func TestHTTPCommandUsesDefaultModuleFromEnv(t *testing.T) {
-	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvProxyToken, "test-key")
 	t.Setenv(config.EnvConfigDir, t.TempDir())
 	t.Setenv(config.EnvModule, "ziniao")
 
@@ -169,7 +169,7 @@ func TestHTTPCommandUsesDefaultModuleFromEnv(t *testing.T) {
 
 func TestHTTPCommandFlagOverridesDefaultModule(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvProxyToken, "test-key")
 	t.Setenv(config.EnvConfigDir, dir)
 	t.Setenv(config.EnvModule, "erp")
 
@@ -191,7 +191,7 @@ func TestHTTPCommandFlagOverridesDefaultModule(t *testing.T) {
 }
 
 func TestHTTPCommandRejectsInvalidQueryJSON(t *testing.T) {
-	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvProxyToken, "test-key")
 	t.Setenv(config.EnvModule, "ziniao")
 
 	var out bytes.Buffer
@@ -209,7 +209,7 @@ func TestHTTPCommandRejectsInvalidQueryJSON(t *testing.T) {
 }
 
 func TestHTTPCommandRejectsQueryArray(t *testing.T) {
-	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvProxyToken, "test-key")
 	t.Setenv(config.EnvModule, "ziniao")
 
 	var out bytes.Buffer
@@ -227,7 +227,7 @@ func TestHTTPCommandRejectsQueryArray(t *testing.T) {
 }
 
 func TestHTTPCommandRequiresModule(t *testing.T) {
-	t.Setenv(config.EnvAuthKey, "test-key")
+	t.Setenv(config.EnvProxyToken, "test-key")
 	t.Setenv(config.EnvConfigDir, t.TempDir())
 	t.Setenv(config.EnvModule, "")
 
@@ -312,7 +312,7 @@ func TestVersionCommand(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
 	}
-	if got := out.String(); !strings.Contains(got, "zn-ent") || !strings.Contains(got, "cli-type: ent") {
+	if got := out.String(); !strings.Contains(got, "zn-ent") || !strings.Contains(got, "cli-type: zn-ent") {
 		t.Fatalf("version output = %s", got)
 	}
 }
@@ -340,7 +340,7 @@ func TestAgentGuidePrintsContent(t *testing.T) {
 }
 
 func TestAgentGuideNoAuthRequired(t *testing.T) {
-	t.Setenv(config.EnvAuthKey, "")
+	t.Setenv(config.EnvProxyToken, "")
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
