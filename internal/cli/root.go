@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"ziniao/internal/config"
+	"ziniao/internal/variant"
 )
 
 type runtime struct {
@@ -18,7 +19,8 @@ type runtime struct {
 	viper  *viper.Viper
 }
 
-func Execute() int {
+func Execute(v variant.Variant) int {
+	variant.SetCurrent(v)
 	root := NewRootCommand(os.Stdout, os.Stderr)
 	if err := root.Execute(); err != nil {
 		return 1
@@ -33,10 +35,11 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 		viper:  viper.New(),
 	}
 
+	v := variant.Current()
 	root := &cobra.Command{
-		Use:           config.AppName,
-		Short:         "Ziniao HTTP API CLI.",
-		Long:          "zn-cli sends authenticated HTTP requests and inspects the API catalog.",
+		Use:           v.AppName,
+		Short:         fmt.Sprintf("%s HTTP API CLI.", v.AppName),
+		Long:          fmt.Sprintf("%s sends authenticated HTTP requests and inspects the API catalog.", v.AppName),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -50,6 +53,10 @@ func NewRootCommand(out, errOut io.Writer) *cobra.Command {
 	root.AddCommand(newHTTPCommand(rt))
 	root.AddCommand(newAPICommand(rt))
 	root.AddCommand(newVersionCommand(rt))
+
+	if v.ExtendRoot != nil {
+		v.ExtendRoot(root)
+	}
 
 	return root
 }

@@ -15,16 +15,20 @@ import (
 )
 
 type HTTPBackend struct {
-	baseURL    *url.URL
-	authKey    string
-	httpClient *http.Client
+	baseURL       *url.URL
+	authKey       string
+	cliType       string
+	cliTypeHeader string
+	httpClient    *http.Client
 }
 
 func NewHTTPBackend(cfg config.Config) *HTTPBackend {
 	parsed, _ := url.Parse(strings.TrimSpace(cfg.ProxyBaseURL))
 	return &HTTPBackend{
-		baseURL: parsed,
-		authKey: strings.TrimSpace(cfg.AuthKey),
+		baseURL:       parsed,
+		authKey:       strings.TrimSpace(cfg.AuthKey),
+		cliType:       strings.TrimSpace(cfg.CLIType),
+		cliTypeHeader: strings.TrimSpace(cfg.CLITypeHeader),
 		httpClient: &http.Client{
 			Timeout:   config.DefaultTimeout,
 			Transport: newHTTPTransport(),
@@ -100,6 +104,9 @@ func (b *HTTPBackend) do(ctx context.Context, method, path string, query url.Val
 	}
 	if b.authKey != "" {
 		req.Header.Set("Authorization", "Bearer "+b.authKey)
+	}
+	if b.cliType != "" && b.cliTypeHeader != "" {
+		req.Header.Set(b.cliTypeHeader, b.cliType)
 	}
 
 	resp, err := b.httpClient.Do(req)

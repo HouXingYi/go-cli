@@ -1,8 +1,8 @@
 package agent
 
-import "ziniao/skills/zn-cli"
+import "ziniao/internal/variant"
 
-// Guide returns the embedded agent guide (SKILL.md).
+// Guide returns the agent guide for the current CLI variant.
 func Guide() string {
-	return zncliguide.Content()
+	return variant.RenderGuide(variant.Current())
 }

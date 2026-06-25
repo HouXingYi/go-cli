@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -8,12 +9,10 @@ import (
 	"github.com/spf13/viper"
 
 	"ziniao/internal/apperr"
+	"ziniao/internal/variant"
 )
 
 const (
-	AppName       = "zn-cli"
-	Version       = "0.1.0"
-	EnvPrefix     = "ZINIAO"
 	OutputText    = "text"
 	OutputJSON    = "json"
 	DefaultOutput = OutputText
@@ -26,12 +25,34 @@ const (
 const DefaultTimeout = 10 * time.Second
 
 type Config struct {
-	ProxyBaseURL string
-	AuthKey      string
+	ProxyBaseURL  string
+	AuthKey       string
+	CLIType       string
+	CLITypeHeader string
+}
+
+func AppName() string {
+	return variant.Current().AppName
+}
+
+func Version() string {
+	return variant.Current().VersionString()
+}
+
+func CLIType() string {
+	return variant.Current().CLIType
+}
+
+func CLITypeHeader() string {
+	return variant.Current().CLITypeHeaderName()
+}
+
+func EnvPrefix() string {
+	return variant.Current().EnvPrefixName()
 }
 
 func Configure(v *viper.Viper) error {
-	v.SetEnvPrefix(EnvPrefix)
+	v.SetEnvPrefix(EnvPrefix())
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	v.AutomaticEnv()
 	return nil
@@ -42,9 +63,12 @@ func Load(v *viper.Viper) (Config, error) {
 		return Config{}, err
 	}
 
+	vr := variant.Current()
 	return Config{
-		ProxyBaseURL: strings.TrimSpace(os.Getenv(EnvProxyBaseURL)),
-		AuthKey:      strings.TrimSpace(os.Getenv(EnvAuthKey)),
+		ProxyBaseURL:  strings.TrimSpace(os.Getenv(EnvProxyBaseURL)),
+		AuthKey:       strings.TrimSpace(os.Getenv(EnvAuthKey)),
+		CLIType:       strings.TrimSpace(vr.CLIType),
+		CLITypeHeader: vr.CLITypeHeaderName(),
 	}, nil
 }
 
@@ -57,4 +81,16 @@ func (c Config) RequireAuthKey() error {
 		return apperr.New(apperr.KindConfig, "auth key is required", "set CLI_AUTH_KEY.")
 	}
 	return nil
+}
+
+func APIInspectHint() string {
+	return fmt.Sprintf("run %s api to inspect available modules and APIs.", AppName())
+}
+
+func ModuleRequiredHint() string {
+	return fmt.Sprintf("run %s config module set <name> or pass --module.", AppName())
+}
+
+func ConfigModuleClearHint() string {
+	return fmt.Sprintf("check state file or run %s config module clear.", AppName())
 }

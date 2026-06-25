@@ -70,14 +70,19 @@ func TestHTTPBackendProxy(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Fatalf("Authorization = %s", r.Header.Get("Authorization"))
 		}
+		if r.Header.Get("Cli-Type") != "ent" {
+			t.Fatalf("Cli-Type = %s", r.Header.Get("Cli-Type"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ret":0,"status":"success","msg":"ok","data":{"ok":true}}`))
 	}))
 	defer server.Close()
 
 	be := NewHTTPBackend(config.Config{
-		ProxyBaseURL: server.URL,
-		AuthKey:      "test-key",
+		ProxyBaseURL:  server.URL,
+		AuthKey:       "test-key",
+		CLIType:       "ent",
+		CLITypeHeader: "Cli-Type",
 	})
 
 	raw, err := be.Proxy(context.Background(), "ziniao", "GET", "/user/list", json.RawMessage(`{"page":1}`), nil)
@@ -105,14 +110,19 @@ func TestHTTPBackendCatalog(t *testing.T) {
 		if r.URL.Query().Get("business") != "user" {
 			t.Fatalf("business = %s", r.URL.Query().Get("business"))
 		}
+		if r.Header.Get("Cli-Type") != "ent" {
+			t.Fatalf("Cli-Type = %s", r.Header.Get("Cli-Type"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ret":0,"status":"success","data":{"module":"ziniao","business":"user","items":[{"name":"list","method":"GET","url":"/api/user/list","title":"查询用户列表"}]}}`))
 	}))
 	defer server.Close()
 
 	be := NewHTTPBackend(config.Config{
-		ProxyBaseURL: server.URL,
-		AuthKey:      "test-key",
+		ProxyBaseURL:  server.URL,
+		AuthKey:       "test-key",
+		CLIType:       "ent",
+		CLITypeHeader: "Cli-Type",
 	})
 
 	raw, err := be.Catalog(context.Background(), "ziniao", "user", "", false)

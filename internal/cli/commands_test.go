@@ -312,7 +312,7 @@ func TestVersionCommand(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v, stderr = %s", err, errOut.String())
 	}
-	if got := out.String(); !strings.Contains(got, "zn-cli") {
+	if got := out.String(); !strings.Contains(got, "zn-ent") || !strings.Contains(got, "cli-type: ent") {
 		t.Fatalf("version output = %s", got)
 	}
 }
@@ -331,8 +331,8 @@ func TestAgentGuidePrintsContent(t *testing.T) {
 	if !strings.HasPrefix(got, "---\n") {
 		t.Fatalf("agent guide output missing frontmatter: %.80q", got)
 	}
-	if !strings.Contains(got, "name: zn-cli") {
-		t.Fatalf("agent guide output missing name: zn-cli: %s", got)
+	if !strings.Contains(got, "name: zn-ent") {
+		t.Fatalf("agent guide output missing name: zn-ent: %s", got)
 	}
 	if !strings.Contains(got, "## 推荐工作流") {
 		t.Fatalf("agent guide output missing workflow section: %s", got)

@@ -1,8 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-$AppName = "zn-cli"
-$Entry = "./cmd/ziniao"
 $DistDir = "dist"
+
+$Variants = @(
+    @{ AppName = "zn-ent"; Entry = "./cmd/zn-ent" },
+    @{ AppName = "zn-eco"; Entry = "./cmd/zn-eco" }
+)
 
 $Targets = @(
     @{ GOOS = "linux"; GOARCH = "amd64" },
@@ -18,21 +21,26 @@ if (Test-Path $DistDir) {
 
 New-Item -ItemType Directory -Force $DistDir | Out-Null
 
-foreach ($Target in $Targets) {
-    $Goos = $Target.GOOS
-    $Goarch = $Target.GOARCH
-    $Output = Join-Path $DistDir "$AppName-$Goos-$Goarch"
+foreach ($Variant in $Variants) {
+    $AppName = $Variant.AppName
+    $Entry = $Variant.Entry
 
-    if ($Goos -eq "windows") {
-        $Output = "$Output.exe"
+    foreach ($Target in $Targets) {
+        $Goos = $Target.GOOS
+        $Goarch = $Target.GOARCH
+        $Output = Join-Path $DistDir "$AppName-$Goos-$Goarch"
+
+        if ($Goos -eq "windows") {
+            $Output = "$Output.exe"
+        }
+
+        Write-Host "Building $Output"
+        $env:GOOS = $Goos
+        $env:GOARCH = $Goarch
+        $env:CGO_ENABLED = "0"
+
+        go build -o $Output $Entry
     }
-
-    Write-Host "Building $Output"
-    $env:GOOS = $Goos
-    $env:GOARCH = $Goarch
-    $env:CGO_ENABLED = "0"
-
-    go build -o $Output $Entry
 }
 
 Remove-Item Env:GOOS -ErrorAction SilentlyContinue

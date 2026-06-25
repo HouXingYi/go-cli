@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="zn-cli"
-ENTRY="./cmd/ziniao"
 DIST_DIR="dist"
+
+variants=(
+  "zn-ent ./cmd/zn-ent"
+  "zn-eco ./cmd/zn-eco"
+)
 
 targets=(
   "linux amd64"
@@ -16,16 +19,20 @@ targets=(
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
-for target in "${targets[@]}"; do
-  read -r goos goarch <<< "$target"
+for variant in "${variants[@]}"; do
+  read -r app_name entry <<< "$variant"
 
-  output="$DIST_DIR/$APP_NAME-$goos-$goarch"
-  if [[ "$goos" == "windows" ]]; then
-    output="$output.exe"
-  fi
+  for target in "${targets[@]}"; do
+    read -r goos goarch <<< "$target"
 
-  echo "Building $output"
-  GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "$output" "$ENTRY"
+    output="$DIST_DIR/$app_name-$goos-$goarch"
+    if [[ "$goos" == "windows" ]]; then
+      output="$output.exe"
+    fi
+
+    echo "Building $output"
+    GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "$output" "$entry"
+  done
 done
 
 echo "Build artifacts are in $DIST_DIR/"

@@ -21,6 +21,12 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	if cfg.ProxyBaseURL != "https://api.example.com/vendor-proxy" {
 		t.Fatalf("ProxyBaseURL = %q", cfg.ProxyBaseURL)
 	}
+	if cfg.CLIType != "ent" {
+		t.Fatalf("CLIType = %q, want ent", cfg.CLIType)
+	}
+	if cfg.CLITypeHeader != "Cli-Type" {
+		t.Fatalf("CLITypeHeader = %q, want Cli-Type", cfg.CLITypeHeader)
+	}
 }
 
 func TestUseRemoteBackend(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"ziniao/internal/apperr"
+	"ziniao/internal/variant"
 )
 
 const (
@@ -33,7 +34,7 @@ func StatePath() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		dir = filepath.Join(dir, "zn-cli")
+		dir = filepath.Join(dir, variant.Current().StateDirName())
 	}
 	return filepath.Join(dir, stateFile), nil
 }
@@ -54,7 +55,7 @@ func LoadState() (State, error) {
 
 	var state State
 	if err := yaml.Unmarshal(data, &state); err != nil {
-		return State{}, apperr.Wrap(apperr.KindConfig, "failed to read CLI state", "check state file or run zn-cli config module clear.", err)
+		return State{}, apperr.Wrap(apperr.KindConfig, "failed to read CLI state", ConfigModuleClearHint(), err)
 	}
 	state.Module = NormalizeModule(state.Module)
 	return state, nil
@@ -103,5 +104,5 @@ func ResolveModule(flagValue string) (string, error) {
 	if module := state.Module; module != "" {
 		return module, nil
 	}
-	return "", apperr.New(apperr.KindConfig, "module is required", "run zn-cli config module set <name> or pass --module.")
+	return "", apperr.New(apperr.KindConfig, "module is required", ModuleRequiredHint())
 }

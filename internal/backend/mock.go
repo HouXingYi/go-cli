@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"ziniao/internal/apperr"
+	"ziniao/internal/config"
 )
 
 type mockModule struct {
@@ -142,13 +143,13 @@ func (b *MockBackend) Proxy(ctx context.Context, module string, method, path str
 				continue
 			}
 			if doc.Method != method {
-				return nil, apperr.New(apperr.KindAPI, fmt.Sprintf("method %s does not match API %s", method, doc.Name), "check method and path against zn-cli api output.")
+				return nil, apperr.New(apperr.KindAPI, fmt.Sprintf("method %s does not match API %s", method, doc.Name), fmt.Sprintf("check method and path against %s api output.", config.AppName()))
 			}
 			return json.Marshal(mockProxyResponse(doc, query, body))
 		}
 	}
 
-	return nil, apperr.New(apperr.KindAPI, fmt.Sprintf("path %q not found for module %q", path, module), "run zn-cli api to inspect available modules and APIs.")
+	return nil, apperr.New(apperr.KindAPI, fmt.Sprintf("path %q not found for module %q", path, module), config.APIInspectHint())
 }
 
 func (b *MockBackend) Catalog(ctx context.Context, module, business, api string, full bool) (json.RawMessage, error) {
@@ -322,7 +323,7 @@ func normalize(value string) string {
 }
 
 func notFound(kind, name string) error {
-	return apperr.New(apperr.KindAPI, fmt.Sprintf("%s %q not found", kind, name), "run zn-cli api to inspect available modules and APIs.")
+	return apperr.New(apperr.KindAPI, fmt.Sprintf("%s %q not found", kind, name), config.APIInspectHint())
 }
 
 func mustMarshal(value interface{}) (json.RawMessage, error) {

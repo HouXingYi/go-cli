@@ -1,0 +1,21 @@
+variants:
+  - id: ent
+    app_name: zn-ent
+    cli_type: ent
+    entry: ./cmd/zn-ent
+  - id: eco
+    app_name: zn-eco
+    cli_type: eco
+    entry: ./cmd/zn-eco
+
+platforms:
+  - goos: linux
+    goarch: amd64
+  - goos: linux
+    goarch: arm64
+  - goos: darwin
+    goarch: amd64
+  - goos: darwin
+    goarch: arm64
+  - goos: windows
+    goarch: amd64

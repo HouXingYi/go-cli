@@ -14,6 +14,7 @@ import (
 	"ziniao/internal/catalog"
 	"ziniao/internal/config"
 	"ziniao/internal/output"
+	"ziniao/internal/variant"
 )
 
 func (rt *runtime) renderer() output.Renderer {
@@ -147,7 +148,7 @@ func newConfigModuleCommand(rt *runtime) *cobra.Command {
 				source = "config"
 			}
 			if module == "" {
-				return rt.writeCommandError(apperr.New(apperr.KindConfig, "no default module configured", "run zn-cli config module set <name> or zn-cli api to list modules."))
+				return rt.writeCommandError(apperr.New(apperr.KindConfig, "no default module configured", fmt.Sprintf("run %s config module set <name> or %s api to list modules.", config.AppName(), config.AppName())))
 			}
 			data := map[string]string{"module": module, "source": source}
 			return rt.renderer().Success(module, data)
@@ -214,11 +215,14 @@ func newVersionCommand(rt *runtime) *cobra.Command {
 		Short: "Print CLI version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			v := variant.Current()
+			line := fmt.Sprintf("%s %s (cli-type: %s)", v.AppName, v.VersionString(), v.CLIType)
 			data := map[string]string{
-				"name":    config.AppName,
-				"version": config.Version,
+				"name":     v.AppName,
+				"version":  v.VersionString(),
+				"cli_type": v.CLIType,
 			}
-			return rt.renderer().Success(fmt.Sprintf("%s %s", config.AppName, config.Version), data)
+			return rt.renderer().Success(line, data)
 		},
 	}
 }
